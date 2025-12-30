@@ -704,6 +704,19 @@
             margin-top: 0.25rem;
         }
 
+        .review-feedback .all-readings {
+            font-size: 0.9rem;
+            margin: 0.5rem 0;
+            padding: 0.5rem;
+            background: rgba(139, 69, 19, 0.1);
+            border-radius: 4px;
+        }
+
+        .review-feedback .current-reading {
+            color: var(--gold);
+            font-weight: 600;
+        }
+
         .review-stats {
             display: flex;
             justify-content: center;
@@ -1565,17 +1578,28 @@
             return [...learnedKanji].filter(k => !vocabKanji.has(k) && KANJI_READINGS[k]);
         }
 
-        // Create reading cards for kanji without vocab
+        // Create reading cards for kanji without vocab - ONE CARD PER READING
         function getReadingCards() {
             const uncoveredKanji = getKanjiWithoutVocab();
-            return uncoveredKanji.map(k => ({
-                word: k,
-                reading: KANJI_READINGS[k][0], // Primary reading
-                meaning: `Readings: ${KANJI_READINGS[k].join(', ')}`,
-                kanji: [k],
-                isReadingCard: true,
-                allReadings: KANJI_READINGS[k]
-            }));
+            const cards = [];
+
+            uncoveredKanji.forEach(k => {
+                const readings = KANJI_READINGS[k] || [];
+                readings.forEach((reading, index) => {
+                    cards.push({
+                        word: k,
+                        reading: reading,
+                        meaning: `Reading ${index + 1} of ${readings.length}: ${reading}`,
+                        kanji: [k],
+                        isReadingCard: true,
+                        allReadings: readings,
+                        readingIndex: index,
+                        srsKey: `reading:${k}:${reading}` // Unique key per reading
+                    });
+                });
+            });
+
+            return cards;
         }
 
         // Compute deck coverage
@@ -1598,15 +1622,21 @@
         }
 
         // SRS Algorithm (simplified SM-2)
+        function getSRSKey(item) {
+            // Use srsKey if defined (per-reading cards), otherwise fallback
+            if (item.srsKey) return item.srsKey;
+            return item.isReadingCard ? `reading:${item.word}` : item.word;
+        }
+
         function getSRSInterval(item) {
-            const key = item.isReadingCard ? `reading:${item.word}` : item.word;
+            const key = getSRSKey(item);
             const data = srsData[key] || { level: 0, nextReview: 0, easeFactor: 2.5 };
             return data;
         }
 
         function updateSRS(item, correct) {
             const now = Date.now();
-            const key = item.isReadingCard ? `reading:${item.word}` : item.word;
+            const key = getSRSKey(item);
             const data = srsData[key] || { level: 0, nextReview: 0, easeFactor: 2.5 };
 
             if (correct) {
@@ -1640,7 +1670,7 @@
 
             // Items due for review (past their nextReview time)
             const due = allItems.filter(item => {
-                const key = item.isReadingCard ? `reading:${item.word}` : item.word;
+                const key = getSRSKey(item);
                 const data = srsData[key];
                 if (!data) return true; // New items are due
                 return data.nextReview <= now;
@@ -1648,10 +1678,8 @@
 
             // Sort: new items first, then by nextReview time
             due.sort((a, b) => {
-                const aKey = a.isReadingCard ? `reading:${a.word}` : a.word;
-                const bKey = b.isReadingCard ? `reading:${b.word}` : b.word;
-                const aData = srsData[aKey];
-                const bData = srsData[bKey];
+                const aData = srsData[getSRSKey(a)];
+                const bData = srsData[getSRSKey(b)];
                 if (!aData && bData) return -1;
                 if (aData && !bData) return 1;
                 if (!aData && !bData) return 0;
@@ -2153,7 +2181,9 @@
             // Update prompt based on card type
             const prompt = document.getElementById('review-prompt');
             if (item.isReadingCard) {
-                prompt.textContent = 'What is the primary reading of this kanji?';
+                const readingNum = item.readingIndex !== undefined ? item.readingIndex + 1 : 1;
+                const totalReadings = item.allReadings ? item.allReadings.length : 1;
+                prompt.textContent = `Reading ${readingNum} of ${totalReadings} — Which is it?`;
             } else {
                 prompt.textContent = 'How do you read this word?';
             }
@@ -2202,14 +2232,23 @@
                 }
             });
 
-            // Show feedback
+            // Show feedback with furigana exposition for reading cards
             const feedback = document.getElementById('review-feedback');
+            let exposition = '';
+
+            if (item.isReadingCard && item.allReadings) {
+                const readingsList = item.allReadings.map((r, i) =>
+                    `<span class="${r === item.reading ? 'current-reading' : ''}">${r}</span>`
+                ).join(' ・ ');
+                exposition = `<div class="all-readings">All readings: ${readingsList}</div>`;
+            }
+
             if (correct) {
                 feedback.className = 'review-feedback correct';
-                feedback.innerHTML = `<div>Correct!</div><div class="meaning">${item.meaning}</div>`;
+                feedback.innerHTML = `<div>Correct!</div>${exposition}<div class="meaning">${item.meaning}</div>`;
             } else {
                 feedback.className = 'review-feedback incorrect';
-                feedback.innerHTML = `<div>The answer is: ${item.reading}</div><div class="meaning">${item.meaning}</div>`;
+                feedback.innerHTML = `<div>The answer is: ${item.reading}</div>${exposition}<div class="meaning">${item.meaning}</div>`;
             }
 
             // Show next button
