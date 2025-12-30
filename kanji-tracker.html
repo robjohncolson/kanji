@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>漢字の道 — Kanji Journey to Japan</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Noto+Serif+JP:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --ink: #1a1a1a;
+            --paper: #f7f5f0;
+            --washi: #faf8f3;
+            --vermillion: #d73b3e;
+            --gold: #c9a227;
+            --gold-light: rgba(201, 162, 39, 0.2);
+            --stone: #6b6b6b;
+            --mist: #e8e4dc;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            background: var(--paper);
+            color: var(--ink);
+            min-height: 100vh;
+        }
+
+        .container { max-width: 1100px; margin: 0 auto; padding: 1.5rem; }
+
+        header {
+            text-align: center;
+            margin-bottom: 2rem;
+            padding: 1.5rem 0;
+            border-bottom: 1px solid var(--mist);
+        }
+
+        h1 {
+            font-family: 'Noto Serif JP', serif;
+            font-size: 2rem;
+            font-weight: 400;
+            letter-spacing: 0.1em;
+        }
+
+        .flight-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: var(--washi);
+            border: 1px solid var(--mist);
+            padding: 0.4rem 0.8rem;
+            border-radius: 2rem;
+            font-size: 0.75rem;
+            margin-top: 0.5rem;
+            color: var(--stone);
+        }
+
+        /* Stats Row */
+        .stats-row {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .stat-card {
+            flex: 1;
+            min-width: 120px;
+            background: var(--washi);
+            border: 1px solid var(--mist);
+            padding: 1rem;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-family: 'Noto Serif JP', serif;
+            font-size: 2rem;
+            font-weight: 700;
+        }
+
+        .stat-value.highlight { color: var(--vermillion); }
+        .stat-value.gold { color: var(--gold); }
+
+        .stat-label {
+            font-size: 0.7rem;
+            color: var(--stone);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-top: 0.25rem;
+        }
+
+        /* Progress Bar */
+        .progress-section {
+            background: var(--washi);
+            border: 1px solid var(--mist);
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .progress-bar {
+            height: 10px;
+            background: var(--mist);
+            border-radius: 5px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--vermillion), var(--gold));
+            transition: width 0.3s ease;
+        }
+
+        /* Action Bar */
+        .action-bar {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+            background: var(--washi);
+            border: 1px solid var(--mist);
+            padding: 1rem;
+        }
+
+        .btn {
+            padding: 0.6rem 1.2rem;
+            border: none;
+            font-family: 'Noto Sans JP', sans-serif;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-primary {
+            background: var(--vermillion);
+            color: white;
+        }
+
+        .btn-primary:hover { background: #c13033; }
+        .btn-primary:disabled {
+            background: var(--mist);
+            color: var(--stone);
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: transparent;
+            border: 1px solid var(--mist);
+            color: var(--stone);
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--ink);
+            color: var(--ink);
+        }
+
+        .selection-count {
+            font-size: 0.85rem;
+            color: var(--stone);
+            margin-left: auto;
+        }
+
+        .selection-count strong {
+            color: var(--vermillion);
+            font-size: 1.1rem;
+        }
+
+        /* Grade Sections */
+        .grade-section {
+            background: var(--washi);
+            border: 1px solid var(--mist);
+            margin-bottom: 0.5rem;
+        }
+
+        .grade-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            cursor: pointer;
+            user-select: none;
+            transition: background 0.2s ease;
+        }
+
+        .grade-header:hover {
+            background: rgba(0,0,0,0.02);
+        }
+
+        .grade-title {
+            font-family: 'Noto Serif JP', serif;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .grade-progress {
+            font-size: 0.8rem;
+            color: var(--stone);
+            background: var(--paper);
+            padding: 0.25rem 0.6rem;
+            border-radius: 1rem;
+        }
+
+        .grade-progress .learned-count {
+            color: var(--gold);
+            font-weight: 600;
+        }
+
+        .grade-arrow {
+            font-size: 0.8rem;
+            color: var(--stone);
+            transition: transform 0.2s ease;
+        }
+
+        .grade-section.expanded .grade-arrow {
+            transform: rotate(180deg);
+        }
+
+        .grade-content {
+            display: none;
+            padding: 0 1rem 1rem;
+        }
+
+        .grade-section.expanded .grade-content {
+            display: block;
+        }
+
+        /* Kanji Grid */
+        .kanji-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+            gap: 4px;
+        }
+
+        .kanji-char {
+            aspect-ratio: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            background: var(--paper);
+            border: 1px solid var(--mist);
+            cursor: pointer;
+            transition: all 0.15s ease;
+            position: relative;
+        }
+
+        .kanji-char:hover {
+            border-color: var(--vermillion);
+            transform: scale(1.1);
+            z-index: 1;
+        }
+
+        .kanji-char.selected {
+            background: rgba(215, 59, 62, 0.15);
+            border-color: var(--vermillion);
+        }
+
+        .kanji-char.learned {
+            background: var(--gold-light);
+            border-color: var(--gold);
+            color: #8a7000;
+        }
+
+        .kanji-char.learned::after {
+            content: '✓';
+            position: absolute;
+            bottom: 2px;
+            right: 2px;
+            font-size: 0.5rem;
+            color: var(--gold);
+        }
+
+        /* History */
+        .history-section {
+            background: var(--washi);
+            border: 1px solid var(--mist);
+            padding: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        .history-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .history-title {
+            font-family: 'Noto Serif JP', serif;
+            font-size: 1rem;
+        }
+
+        .history-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .history-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem;
+            border-bottom: 1px solid var(--mist);
+            font-size: 0.85rem;
+        }
+
+        .history-item:last-child { border-bottom: none; }
+
+        .history-kanji {
+            font-size: 1rem;
+            letter-spacing: 0.1em;
+            max-width: 60%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .history-meta {
+            text-align: right;
+            color: var(--stone);
+        }
+
+        .history-count {
+            font-family: 'Noto Serif JP', serif;
+            font-size: 1.2rem;
+            color: var(--gold);
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 2rem;
+            color: var(--stone);
+        }
+
+        .empty-state .kanji {
+            font-family: 'Noto Serif JP', serif;
+            font-size: 3rem;
+            color: var(--mist);
+        }
+
+        @media (max-width: 600px) {
+            .kanji-grid { grid-template-columns: repeat(auto-fill, minmax(38px, 1fr)); }
+            .kanji-char { font-size: 1.2rem; }
+            .stats-row { gap: 0.5rem; }
+            .stat-card { padding: 0.75rem; }
+            .stat-value { font-size: 1.5rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>漢字の道</h1>
+            <div class="flight-badge">
+                <span>✈</span>
+                <span>JL0007 · BOS → NRT · July 27, 2026</span>
+            </div>
+        </header>
+
+        <div class="stats-row">
+            <div class="stat-card">
+                <div class="stat-value gold" id="learned-count">0</div>
+                <div class="stat-label">Learned</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value highlight" id="remaining-count">1026</div>
+                <div class="stat-label">Remaining</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="days-left">209</div>
+                <div class="stat-label">Days Left</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="per-day">5</div>
+                <div class="stat-label">Per Day</div>
+            </div>
+        </div>
+
+        <div class="progress-section">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+            </div>
+        </div>
+
+        <div class="action-bar">
+            <button class="btn btn-primary" id="log-btn" disabled>Log Selected</button>
+            <button class="btn btn-secondary" id="clear-btn">Clear Selection</button>
+            <span class="selection-count"><strong id="selected-count">0</strong> selected</span>
+        </div>
+
+        <div id="grade-sections"></div>
+
+        <div class="history-section">
+            <div class="history-header">
+                <span class="history-title">Recent Sessions</span>
+                <button class="btn btn-secondary" onclick="exportData()">Export</button>
+            </div>
+            <div class="history-list" id="history-list">
+                <div class="empty-state">
+                    <div class="kanji">始</div>
+                    <p>Click kanji above to begin</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Kanji Data by Grade
+        const KANJI_BY_GRADE = {
+            1: "一右雨円王音下火花貝学気九休玉金空月犬見五口校左三山子四糸字耳七車手十出女小上森人水正生青夕石赤千川先早草足村大男竹中虫町天田土二日入年白八百文木本名目立力林六",
+            2: "刀丸弓工才万引牛元戸午公今止少心切太内父分方毛友外兄古広市矢台冬半母北用羽回会交光考行合寺自色西多地池当同肉米毎何角汽近形言谷作社図声走体弟売麦来里画岩京国姉知長直店東歩妹明門夜科海活計後思室首秋春食星前茶昼点南風夏家記帰原高紙時弱書通馬魚強教黄黒細週雪船組鳥野理雲絵間場晴朝答道買番園遠楽新数電話歌語算読聞鳴線親頭顔曜",
+            3: "丁化区反予央去号皿仕写主申世他打代皮氷平由礼安曲血向死次式守州全有羊両列医究局君決住助身対投豆坂返役委育泳岸苦具幸使始事実者取受所昔注定波板表服物放味命油和屋界客急級係研県指持拾重昭乗神相送待炭柱追度畑発美秒品負面洋員院荷起宮庫根酒消真息速庭島配倍病勉流旅悪球祭終習宿商章深進族第帳笛転都動部問飲運温開階寒期軽湖港歯集暑勝植短着湯登等童悲筆遊葉陽落暗意感漢業詩想鉄農福路駅銀鼻様緑練横談調箱館橋整薬題",
+            4: "欠氏井不夫以加功札司失必付辺包末未民令衣印各共好成争仲兆伝灯老位改完岐希求芸佐材児初臣折束沖低努阪兵別利良冷労英岡果芽官季泣協径固刷参治周松卒底的典奈念府阜法牧例茨栄軍建香昨祝城信省浅単栃飛変便約勇要案害挙訓郡候差残借笑席倉孫帯徒特梅浴料連貨械健康菜埼崎産鹿唱清巣側梨敗票副望陸媛賀街覚給極景結最散滋順焼然隊達博飯富満無量愛塩群試辞照節戦続置働管関旗漁熊察種静説徳億課潟器縄選熱標養輪機積録観験類願鏡議競",
+            5: "久士支比仏圧永可刊旧句史示犯布弁因仮件再在団任囲応快技均告災志似序条状判防余易往価河居効妻枝舎述招制性毒版肥非武紀逆型限故厚査政祖則独保迷益桜格個耕航財殺師修素造能破粉脈容留移液眼基寄規救許経険現混採授術常情責接設率断張停堂得貧婦務略営過喜検減証象税絶測属貸貯提程統費備評復報貿解幹義禁鉱罪資飼準勢損墓豊夢演慣境構際雑酸精製総像増態適銅複綿領歴確潔賛質賞導編暴衛興築燃輸講謝績額織職識護",
+            6: "干己寸亡尺収仁片穴冊処庁幼宇灰危机吸后至舌存宅我系孝困私否批忘乱卵延沿拡供券呼刻若宗承垂担宙忠届乳拝並宝枚胃映革巻看皇紅砂姿宣専泉洗染奏退段派背肺律恩株胸降骨座蚕射従純除将針値展討党納俳班秘俵陛朗異域郷済視捨推盛窓探著頂脳閉訪密訳郵欲翌割揮貴勤筋敬裁策詞就衆善創装尊痛晩補棒絹源署傷蒸聖誠暖腸賃腹幕盟預裏閣疑誤穀誌磁障銭層認暮模遺劇権熟諸蔵誕潮敵論激憲鋼樹縦操糖奮厳縮優覧簡難臨警臓"
+        };
+
+        const GRADE_NAMES = {
+            1: "一年生",
+            2: "二年生",
+            3: "三年生",
+            4: "四年生",
+            5: "五年生",
+            6: "六年生"
+        };
+
+        const TARGET_DATE = new Date('2026-07-27');
+        const TOTAL_KANJI = 1026;
+
+        // State
+        let learnedKanji = new Set(JSON.parse(localStorage.getItem('learnedKanji') || '[]'));
+        let selectedKanji = new Set();
+        let history = JSON.parse(localStorage.getItem('kanjiHistory') || '[]');
+        let expandedGrades = new Set([1]); // Start with grade 1 expanded
+
+        function init() {
+            renderGradeSections();
+            updateStats();
+            renderHistory();
+
+            document.getElementById('log-btn').addEventListener('click', logSelected);
+            document.getElementById('clear-btn').addEventListener('click', clearSelection);
+        }
+
+        function renderGradeSections() {
+            const container = document.getElementById('grade-sections');
+            container.innerHTML = '';
+
+            for (let grade = 1; grade <= 6; grade++) {
+                const kanji = KANJI_BY_GRADE[grade];
+                const learnedInGrade = [...kanji].filter(k => learnedKanji.has(k)).length;
+                const isExpanded = expandedGrades.has(grade);
+
+                const section = document.createElement('div');
+                section.className = `grade-section ${isExpanded ? 'expanded' : ''}`;
+                section.innerHTML = `
+                    <div class="grade-header" onclick="toggleGrade(${grade})">
+                        <span class="grade-title">
+                            ${GRADE_NAMES[grade]}
+                            <span class="grade-progress">
+                                <span class="learned-count">${learnedInGrade}</span> / ${kanji.length}
+                            </span>
+                        </span>
+                        <span class="grade-arrow">▼</span>
+                    </div>
+                    <div class="grade-content">
+                        <div class="kanji-grid" id="grid-${grade}"></div>
+                    </div>
+                `;
+                container.appendChild(section);
+
+                if (isExpanded) {
+                    renderKanjiGrid(grade);
+                }
+            }
+        }
+
+        function toggleGrade(grade) {
+            if (expandedGrades.has(grade)) {
+                expandedGrades.delete(grade);
+            } else {
+                expandedGrades.add(grade);
+            }
+            renderGradeSections();
+        }
+
+        function renderKanjiGrid(grade) {
+            const container = document.getElementById(`grid-${grade}`);
+            if (!container) return;
+
+            const kanji = KANJI_BY_GRADE[grade];
+            container.innerHTML = '';
+
+            for (const char of kanji) {
+                const div = document.createElement('div');
+                div.className = 'kanji-char';
+                div.textContent = char;
+
+                if (learnedKanji.has(char)) {
+                    div.classList.add('learned');
+                } else if (selectedKanji.has(char)) {
+                    div.classList.add('selected');
+                }
+
+                div.onclick = () => toggleKanji(char, div);
+                container.appendChild(div);
+            }
+        }
+
+        function toggleKanji(char, element) {
+            if (learnedKanji.has(char)) return; // Already learned
+
+            if (selectedKanji.has(char)) {
+                selectedKanji.delete(char);
+                element.classList.remove('selected');
+            } else {
+                selectedKanji.add(char);
+                element.classList.add('selected');
+            }
+
+            updateSelectionCount();
+        }
+
+        function updateSelectionCount() {
+            document.getElementById('selected-count').textContent = selectedKanji.size;
+            document.getElementById('log-btn').disabled = selectedKanji.size === 0;
+        }
+
+        function logSelected() {
+            if (selectedKanji.size === 0) return;
+
+            const chars = [...selectedKanji];
+            const entry = {
+                id: Date.now(),
+                date: new Date().toISOString(),
+                kanji: chars.join(''),
+                count: chars.length
+            };
+
+            // Add to learned
+            chars.forEach(k => learnedKanji.add(k));
+            history.unshift(entry);
+
+            // Save
+            localStorage.setItem('learnedKanji', JSON.stringify([...learnedKanji]));
+            localStorage.setItem('kanjiHistory', JSON.stringify(history));
+
+            // Reset
+            selectedKanji.clear();
+            updateSelectionCount();
+            renderGradeSections();
+            updateStats();
+            renderHistory();
+        }
+
+        function clearSelection() {
+            selectedKanji.clear();
+            updateSelectionCount();
+            renderGradeSections();
+        }
+
+        function updateStats() {
+            const learned = learnedKanji.size;
+            const remaining = TOTAL_KANJI - learned;
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const daysLeft = Math.max(0, Math.ceil((TARGET_DATE - today) / (1000 * 60 * 60 * 24)));
+            const perDay = daysLeft > 0 ? Math.ceil(remaining / daysLeft) : 0;
+            const percent = (learned / TOTAL_KANJI) * 100;
+
+            document.getElementById('learned-count').textContent = learned;
+            document.getElementById('remaining-count').textContent = remaining;
+            document.getElementById('days-left').textContent = daysLeft;
+            document.getElementById('per-day').textContent = perDay;
+            document.getElementById('progress-fill').style.width = `${percent}%`;
+        }
+
+        function renderHistory() {
+            const container = document.getElementById('history-list');
+
+            if (history.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="kanji">始</div>
+                        <p>Click kanji above to begin</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = history.slice(0, 10).map(entry => {
+                const date = new Date(entry.date);
+                const formatted = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                return `
+                    <div class="history-item">
+                        <span class="history-kanji">${entry.kanji}</span>
+                        <div class="history-meta">
+                            <div class="history-count">+${entry.count}</div>
+                            <div>${formatted}</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function exportData() {
+            const data = {
+                learnedKanji: [...learnedKanji],
+                history: history,
+                exportedAt: new Date().toISOString()
+            };
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `kanji-journey-${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+        }
+
+        init();
+    </script>
+</body>
+</html>
