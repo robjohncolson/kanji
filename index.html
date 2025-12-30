@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>漢字の道 — Kanji Journey to Japan</title>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Noto+Serif+JP:wght@400;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/hanzi-writer@3.5/dist/hanzi-writer.min.js"></script>
@@ -25,6 +25,12 @@
             background: var(--paper);
             color: var(--ink);
             min-height: 100vh;
+        }
+
+        /* Lock scrolling when modal is open */
+        body.modal-open {
+            overflow: hidden;
+            overscroll-behavior: none;
         }
 
         .container { max-width: 1100px; margin: 0 auto; padding: 1.5rem; }
@@ -415,6 +421,7 @@
             border: 1px solid var(--stone);
             background: white;
             position: relative;
+            touch-action: none; /* Prevent scroll/zoom while drawing */
         }
 
         /* 4x4 Grid overlay */
@@ -488,14 +495,80 @@
         }
 
         @media (max-width: 600px) {
-            .kanji-grid { grid-template-columns: repeat(auto-fill, minmax(38px, 1fr)); }
-            .kanji-char { font-size: 1.2rem; }
+            /* Larger kanji tiles for touch */
+            .kanji-grid {
+                grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+                gap: 6px;
+            }
+            .kanji-char { font-size: 1.4rem; }
+
             .stats-row { gap: 0.5rem; }
             .stat-card { padding: 0.75rem; }
             .stat-value { font-size: 1.5rem; }
-            .writer-container { width: 240px; height: 240px; }
-            .writer-container::before { background-size: 60px 60px; }
-            .modal-content { padding: 1.5rem; }
+
+            /* LARGER canvas on mobile, not smaller */
+            .writer-container {
+                width: min(85vw, 320px);
+                height: min(85vw, 320px);
+            }
+            .writer-container::before {
+                background-size: calc(min(85vw, 320px) / 4) calc(min(85vw, 320px) / 4);
+            }
+
+            /* Modal improvements */
+            .modal-content {
+                padding: 1.5rem;
+                width: 95%;
+                max-height: 90vh;
+                overflow-y: auto;
+                padding-bottom: calc(1.5rem + env(safe-area-inset-bottom));
+            }
+
+            /* Larger touch targets for buttons */
+            .modal-actions {
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+            .modal-actions .btn {
+                width: 100%;
+                min-height: 48px;
+                font-size: 1rem;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            /* Larger close button */
+            .close-modal {
+                font-size: 2rem;
+                padding: 0.5rem;
+                min-width: 44px;
+                min-height: 44px;
+            }
+
+            /* Grade headers more tappable */
+            .grade-header {
+                padding: 1.25rem 1rem;
+                min-height: 56px;
+            }
+
+            /* Action bar adjustments */
+            .action-bar {
+                padding: 0.75rem;
+            }
+        }
+
+        /* Safe area insets for notched phones */
+        @supports (padding: env(safe-area-inset-bottom)) {
+            .container {
+                padding-left: max(1.5rem, env(safe-area-inset-left));
+                padding-right: max(1.5rem, env(safe-area-inset-right));
+                padding-bottom: env(safe-area-inset-bottom);
+            }
+            .modal-overlay {
+                padding: env(safe-area-inset-top) env(safe-area-inset-right)
+                         env(safe-area-inset-bottom) env(safe-area-inset-left);
+            }
         }
     </style>
 </head>
@@ -696,13 +769,24 @@
             document.getElementById('modal-actions-main').style.display = 'flex';
             document.getElementById('modal-actions-fallback').style.display = 'none';
 
+            // Lock body scroll on mobile
+            document.body.classList.add('modal-open');
+
             modal.classList.add('active');
             target.innerHTML = '';
 
+            // Dynamic canvas size based on container (responsive)
+            const containerStyle = getComputedStyle(target);
+            const canvasSize = Math.min(
+                parseInt(containerStyle.width) || 280,
+                parseInt(containerStyle.height) || 280
+            );
+            const isMobile = window.innerWidth <= 600;
+
             // Create HanziWriter with Japanese data preference
             writer = HanziWriter.create('writer-target', char, {
-                width: 280,
-                height: 280,
+                width: canvasSize,
+                height: canvasSize,
                 padding: 20,
                 showOutline: true,
                 strokeAnimationSpeed: 1.5,
@@ -712,8 +796,8 @@
                 highlightColor: '#c9a227',
                 outlineColor: '#e8e4dc',
                 drawingColor: '#1a1a1a',
-                leniency: 1.2, // Slightly forgiving
-                showHintAfterMisses: 3,
+                leniency: isMobile ? 1.5 : 1.2, // More forgiving on mobile
+                showHintAfterMisses: isMobile ? 2 : 3, // Faster hints on mobile
                 charDataLoader: function(char, onComplete, onErr) {
                     // Try Japanese data first (@jamsch package), fallback to Chinese
                     fetch(`https://cdn.jsdelivr.net/npm/@jamsch/hanzi-writer-data-jp@2.0.2/${char}.json`)
@@ -818,6 +902,7 @@
 
         function closeModal() {
             document.getElementById('practice-modal').classList.remove('active');
+            document.body.classList.remove('modal-open'); // Restore body scroll
             if (writer) {
                 writer.cancelQuiz();
                 writer = null;
