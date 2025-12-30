@@ -591,6 +591,143 @@
             color: var(--stone);
         }
 
+        /* Review System */
+        .review-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            background: var(--gold);
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 2rem;
+            font-size: 0.8rem;
+            cursor: pointer;
+            font-family: 'Noto Sans JP', sans-serif;
+            transition: all 0.2s ease;
+            margin-left: 0.5rem;
+        }
+
+        .review-btn:hover {
+            background: #b8911f;
+        }
+
+        .review-btn:disabled {
+            background: var(--mist);
+            color: var(--stone);
+            cursor: not-allowed;
+        }
+
+        .review-btn .count {
+            background: rgba(255,255,255,0.3);
+            padding: 0.1rem 0.4rem;
+            border-radius: 1rem;
+            font-size: 0.7rem;
+        }
+
+        .review-modal-content {
+            text-align: center;
+            max-width: 400px;
+        }
+
+        .review-word {
+            font-family: 'Noto Serif JP', serif;
+            font-size: 3rem;
+            margin: 1.5rem 0;
+            color: var(--ink);
+        }
+
+        .review-prompt {
+            font-size: 0.9rem;
+            color: var(--stone);
+            margin-bottom: 1.5rem;
+        }
+
+        .reading-choices {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .reading-choice {
+            padding: 1rem;
+            border: 2px solid var(--mist);
+            background: var(--paper);
+            font-family: 'Noto Sans JP', sans-serif;
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            border-radius: 4px;
+        }
+
+        .reading-choice:hover {
+            border-color: var(--vermillion);
+            background: rgba(215, 59, 62, 0.05);
+        }
+
+        .reading-choice.correct {
+            border-color: var(--gold);
+            background: var(--gold-light);
+            color: #8a7000;
+        }
+
+        .reading-choice.incorrect {
+            border-color: var(--vermillion);
+            background: rgba(215, 59, 62, 0.1);
+            color: var(--vermillion);
+        }
+
+        .reading-choice:disabled {
+            cursor: default;
+        }
+
+        .review-feedback {
+            min-height: 3rem;
+            padding: 0.75rem;
+            margin-top: 1rem;
+            border-radius: 4px;
+        }
+
+        .review-feedback.correct {
+            background: var(--gold-light);
+            color: #8a7000;
+        }
+
+        .review-feedback.incorrect {
+            background: rgba(215, 59, 62, 0.1);
+            color: var(--vermillion);
+        }
+
+        .review-feedback .meaning {
+            font-size: 0.85rem;
+            margin-top: 0.25rem;
+        }
+
+        .review-stats {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin-top: 1rem;
+            font-size: 0.85rem;
+            color: var(--stone);
+        }
+
+        .review-stats .stat {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .review-stats .stat-num {
+            font-family: 'Noto Serif JP', serif;
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .review-stats .stat-num.gold { color: var(--gold); }
+        .review-stats .stat-num.red { color: var(--vermillion); }
+
         @media (max-width: 600px) {
             /* Larger kanji tiles for touch */
             .kanji-grid {
@@ -713,6 +850,9 @@
 
         <div class="action-bar">
             <span class="selection-count" id="selection-info">Click any kanji to practice strokes</span>
+            <button class="review-btn" id="review-btn" onclick="startReviewSession()" disabled>
+                復習 <span class="count" id="review-count">0</span>
+            </button>
         </div>
 
         <div id="grade-sections"></div>
@@ -774,6 +914,33 @@
         </div>
     </div>
 
+    <!-- Review Modal -->
+    <div class="modal-overlay" id="review-modal">
+        <div class="modal-content review-modal-content">
+            <button class="close-modal" onclick="closeReviewModal()">&times;</button>
+            <div class="review-prompt" id="review-prompt">How do you read this word?</div>
+            <div class="review-word" id="review-word">一人</div>
+            <div class="reading-choices" id="reading-choices">
+                <!-- Choices populated by JS -->
+            </div>
+            <div class="review-feedback" id="review-feedback"></div>
+            <div class="review-stats">
+                <div class="stat">
+                    <span class="stat-num gold" id="review-correct">0</span>
+                    <span>Correct</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-num red" id="review-wrong">0</span>
+                    <span>Wrong</span>
+                </div>
+            </div>
+            <div class="modal-actions" style="margin-top: 1rem;">
+                <button class="btn btn-primary" id="review-next-btn" onclick="nextReviewCard()" style="display: none;">Next</button>
+                <button class="btn btn-secondary" onclick="closeReviewModal()">End Session</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // Kanji Data by Grade
         const KANJI_BY_GRADE = {
@@ -808,11 +975,271 @@
         // Streak tracking
         let streakData = JSON.parse(localStorage.getItem('streakData') || '{"streak": 0, "lastPractice": null}');
 
+        // SRS State
+        let srsData = JSON.parse(localStorage.getItem('srsData') || '{}');
+        let reviewSession = { queue: [], current: null, correct: 0, wrong: 0 };
+
+        // Vocabulary Dataset - words using learned kanji with readings
+        // Format: { word, reading, meaning, kanji (array of kanji used) }
+        const VOCABULARY = [
+            // Grade 1 vocabulary
+            { word: "一人", reading: "ひとり", meaning: "one person / alone", kanji: ["一", "人"] },
+            { word: "一日", reading: "いちにち", meaning: "one day", kanji: ["一", "日"] },
+            { word: "一つ", reading: "ひとつ", meaning: "one thing", kanji: ["一"] },
+            { word: "二人", reading: "ふたり", meaning: "two people", kanji: ["二", "人"] },
+            { word: "二日", reading: "ふつか", meaning: "2nd day / two days", kanji: ["二", "日"] },
+            { word: "三人", reading: "さんにん", meaning: "three people", kanji: ["三", "人"] },
+            { word: "三日", reading: "みっか", meaning: "3rd day / three days", kanji: ["三", "日"] },
+            { word: "四人", reading: "よにん", meaning: "four people", kanji: ["四", "人"] },
+            { word: "四日", reading: "よっか", meaning: "4th day / four days", kanji: ["四", "日"] },
+            { word: "五人", reading: "ごにん", meaning: "five people", kanji: ["五", "人"] },
+            { word: "五日", reading: "いつか", meaning: "5th day / five days", kanji: ["五", "日"] },
+            { word: "六日", reading: "むいか", meaning: "6th day / six days", kanji: ["六", "日"] },
+            { word: "七日", reading: "なのか", meaning: "7th day / seven days", kanji: ["七", "日"] },
+            { word: "八日", reading: "ようか", meaning: "8th day / eight days", kanji: ["八", "日"] },
+            { word: "九日", reading: "ここのか", meaning: "9th day / nine days", kanji: ["九", "日"] },
+            { word: "十日", reading: "とおか", meaning: "10th day / ten days", kanji: ["十", "日"] },
+            { word: "百", reading: "ひゃく", meaning: "hundred", kanji: ["百"] },
+            { word: "千", reading: "せん", meaning: "thousand", kanji: ["千"] },
+            { word: "日本", reading: "にほん", meaning: "Japan", kanji: ["日", "本"] },
+            { word: "本", reading: "ほん", meaning: "book", kanji: ["本"] },
+            { word: "山", reading: "やま", meaning: "mountain", kanji: ["山"] },
+            { word: "川", reading: "かわ", meaning: "river", kanji: ["川"] },
+            { word: "火山", reading: "かざん", meaning: "volcano", kanji: ["火", "山"] },
+            { word: "水", reading: "みず", meaning: "water", kanji: ["水"] },
+            { word: "火", reading: "ひ", meaning: "fire", kanji: ["火"] },
+            { word: "木", reading: "き", meaning: "tree", kanji: ["木"] },
+            { word: "金", reading: "かね", meaning: "money / gold", kanji: ["金"] },
+            { word: "土", reading: "つち", meaning: "earth / soil", kanji: ["土"] },
+            { word: "月", reading: "つき", meaning: "moon / month", kanji: ["月"] },
+            { word: "日", reading: "ひ", meaning: "sun / day", kanji: ["日"] },
+            { word: "空", reading: "そら", meaning: "sky", kanji: ["空"] },
+            { word: "雨", reading: "あめ", meaning: "rain", kanji: ["雨"] },
+            { word: "花", reading: "はな", meaning: "flower", kanji: ["花"] },
+            { word: "草", reading: "くさ", meaning: "grass", kanji: ["草"] },
+            { word: "森", reading: "もり", meaning: "forest", kanji: ["森"] },
+            { word: "林", reading: "はやし", meaning: "grove / woods", kanji: ["林"] },
+            { word: "石", reading: "いし", meaning: "stone", kanji: ["石"] },
+            { word: "竹", reading: "たけ", meaning: "bamboo", kanji: ["竹"] },
+            { word: "虫", reading: "むし", meaning: "insect", kanji: ["虫"] },
+            { word: "貝", reading: "かい", meaning: "shellfish", kanji: ["貝"] },
+            { word: "犬", reading: "いぬ", meaning: "dog", kanji: ["犬"] },
+            { word: "大きい", reading: "おおきい", meaning: "big", kanji: ["大"] },
+            { word: "小さい", reading: "ちいさい", meaning: "small", kanji: ["小"] },
+            { word: "上", reading: "うえ", meaning: "above / up", kanji: ["上"] },
+            { word: "下", reading: "した", meaning: "below / down", kanji: ["下"] },
+            { word: "中", reading: "なか", meaning: "inside / middle", kanji: ["中"] },
+            { word: "左", reading: "ひだり", meaning: "left", kanji: ["左"] },
+            { word: "右", reading: "みぎ", meaning: "right", kanji: ["右"] },
+            { word: "出る", reading: "でる", meaning: "to exit / go out", kanji: ["出"] },
+            { word: "入る", reading: "はいる", meaning: "to enter", kanji: ["入"] },
+            { word: "見る", reading: "みる", meaning: "to see / look", kanji: ["見"] },
+            { word: "手", reading: "て", meaning: "hand", kanji: ["手"] },
+            { word: "足", reading: "あし", meaning: "foot / leg", kanji: ["足"] },
+            { word: "口", reading: "くち", meaning: "mouth", kanji: ["口"] },
+            { word: "耳", reading: "みみ", meaning: "ear", kanji: ["耳"] },
+            { word: "目", reading: "め", meaning: "eye", kanji: ["目"] },
+            { word: "男", reading: "おとこ", meaning: "man", kanji: ["男"] },
+            { word: "女", reading: "おんな", meaning: "woman", kanji: ["女"] },
+            { word: "子", reading: "こ", meaning: "child", kanji: ["子"] },
+            { word: "男の子", reading: "おとこのこ", meaning: "boy", kanji: ["男", "子"] },
+            { word: "女の子", reading: "おんなのこ", meaning: "girl", kanji: ["女", "子"] },
+            { word: "人", reading: "ひと", meaning: "person", kanji: ["人"] },
+            { word: "名前", reading: "なまえ", meaning: "name", kanji: ["名"] },
+            { word: "先生", reading: "せんせい", meaning: "teacher", kanji: ["先", "生"] },
+            { word: "生きる", reading: "いきる", meaning: "to live", kanji: ["生"] },
+            { word: "学生", reading: "がくせい", meaning: "student", kanji: ["学", "生"] },
+            { word: "学校", reading: "がっこう", meaning: "school", kanji: ["学", "校"] },
+            { word: "学ぶ", reading: "まなぶ", meaning: "to learn", kanji: ["学"] },
+            { word: "文字", reading: "もじ", meaning: "character / letter", kanji: ["文", "字"] },
+            { word: "正しい", reading: "ただしい", meaning: "correct", kanji: ["正"] },
+            { word: "青い", reading: "あおい", meaning: "blue", kanji: ["青"] },
+            { word: "赤い", reading: "あかい", meaning: "red", kanji: ["赤"] },
+            { word: "白い", reading: "しろい", meaning: "white", kanji: ["白"] },
+            { word: "玉", reading: "たま", meaning: "ball / sphere", kanji: ["玉"] },
+            { word: "王", reading: "おう", meaning: "king", kanji: ["王"] },
+            { word: "円", reading: "えん", meaning: "yen / circle", kanji: ["円"] },
+            { word: "音", reading: "おと", meaning: "sound", kanji: ["音"] },
+            { word: "気", reading: "き", meaning: "spirit / energy", kanji: ["気"] },
+            { word: "天気", reading: "てんき", meaning: "weather", kanji: ["天", "気"] },
+            { word: "休む", reading: "やすむ", meaning: "to rest", kanji: ["休"] },
+            { word: "糸", reading: "いと", meaning: "thread", kanji: ["糸"] },
+            { word: "車", reading: "くるま", meaning: "car", kanji: ["車"] },
+            { word: "年", reading: "とし", meaning: "year", kanji: ["年"] },
+            { word: "今年", reading: "ことし", meaning: "this year", kanji: ["年"] },
+            { word: "夕方", reading: "ゆうがた", meaning: "evening", kanji: ["夕"] },
+            { word: "早い", reading: "はやい", meaning: "early / fast", kanji: ["早"] },
+            { word: "町", reading: "まち", meaning: "town", kanji: ["町"] },
+            { word: "村", reading: "むら", meaning: "village", kanji: ["村"] },
+            { word: "田", reading: "た", meaning: "rice field", kanji: ["田"] },
+            { word: "天", reading: "てん", meaning: "heaven / sky", kanji: ["天"] },
+            { word: "立つ", reading: "たつ", meaning: "to stand", kanji: ["立"] },
+            { word: "力", reading: "ちから", meaning: "power / strength", kanji: ["力"] },
+            // Grade 2 vocabulary
+            { word: "今日", reading: "きょう", meaning: "today", kanji: ["今", "日"] },
+            { word: "明日", reading: "あした", meaning: "tomorrow", kanji: ["明", "日"] },
+            { word: "友達", reading: "ともだち", meaning: "friend", kanji: ["友"] },
+            { word: "父", reading: "ちち", meaning: "father", kanji: ["父"] },
+            { word: "母", reading: "はは", meaning: "mother", kanji: ["母"] },
+            { word: "兄", reading: "あに", meaning: "older brother", kanji: ["兄"] },
+            { word: "姉", reading: "あね", meaning: "older sister", kanji: ["姉"] },
+            { word: "弟", reading: "おとうと", meaning: "younger brother", kanji: ["弟"] },
+            { word: "妹", reading: "いもうと", meaning: "younger sister", kanji: ["妹"] },
+            { word: "家", reading: "いえ", meaning: "house / home", kanji: ["家"] },
+            { word: "門", reading: "もん", meaning: "gate", kanji: ["門"] },
+            { word: "店", reading: "みせ", meaning: "shop / store", kanji: ["店"] },
+            { word: "電話", reading: "でんわ", meaning: "telephone", kanji: ["電", "話"] },
+            { word: "歩く", reading: "あるく", meaning: "to walk", kanji: ["歩"] },
+            { word: "走る", reading: "はしる", meaning: "to run", kanji: ["走"] },
+            { word: "買う", reading: "かう", meaning: "to buy", kanji: ["買"] },
+            { word: "売る", reading: "うる", meaning: "to sell", kanji: ["売"] },
+            { word: "食べる", reading: "たべる", meaning: "to eat", kanji: ["食"] },
+            { word: "飲む", reading: "のむ", meaning: "to drink", kanji: ["飲"] },
+            { word: "読む", reading: "よむ", meaning: "to read", kanji: ["読"] },
+            { word: "書く", reading: "かく", meaning: "to write", kanji: ["書"] },
+            { word: "聞く", reading: "きく", meaning: "to hear / ask", kanji: ["聞"] },
+            { word: "話す", reading: "はなす", meaning: "to speak", kanji: ["話"] },
+            { word: "言う", reading: "いう", meaning: "to say", kanji: ["言"] },
+            { word: "考える", reading: "かんがえる", meaning: "to think", kanji: ["考"] },
+            { word: "知る", reading: "しる", meaning: "to know", kanji: ["知"] },
+            { word: "思う", reading: "おもう", meaning: "to think / feel", kanji: ["思"] },
+            { word: "会う", reading: "あう", meaning: "to meet", kanji: ["会"] },
+            { word: "帰る", reading: "かえる", meaning: "to return home", kanji: ["帰"] },
+            { word: "来る", reading: "くる", meaning: "to come", kanji: ["来"] },
+            { word: "行く", reading: "いく", meaning: "to go", kanji: ["行"] },
+            { word: "時間", reading: "じかん", meaning: "time", kanji: ["時", "間"] },
+            { word: "朝", reading: "あさ", meaning: "morning", kanji: ["朝"] },
+            { word: "昼", reading: "ひる", meaning: "noon / daytime", kanji: ["昼"] },
+            { word: "夜", reading: "よる", meaning: "night", kanji: ["夜"] },
+            { word: "春", reading: "はる", meaning: "spring", kanji: ["春"] },
+            { word: "夏", reading: "なつ", meaning: "summer", kanji: ["夏"] },
+            { word: "秋", reading: "あき", meaning: "autumn", kanji: ["秋"] },
+            { word: "冬", reading: "ふゆ", meaning: "winter", kanji: ["冬"] },
+            { word: "東", reading: "ひがし", meaning: "east", kanji: ["東"] },
+            { word: "西", reading: "にし", meaning: "west", kanji: ["西"] },
+            { word: "南", reading: "みなみ", meaning: "south", kanji: ["南"] },
+            { word: "北", reading: "きた", meaning: "north", kanji: ["北"] },
+            { word: "海", reading: "うみ", meaning: "sea / ocean", kanji: ["海"] },
+            { word: "魚", reading: "さかな", meaning: "fish", kanji: ["魚"] },
+            { word: "鳥", reading: "とり", meaning: "bird", kanji: ["鳥"] },
+            { word: "馬", reading: "うま", meaning: "horse", kanji: ["馬"] },
+            { word: "牛", reading: "うし", meaning: "cow", kanji: ["牛"] },
+            { word: "雪", reading: "ゆき", meaning: "snow", kanji: ["雪"] },
+            { word: "雲", reading: "くも", meaning: "cloud", kanji: ["雲"] },
+            { word: "風", reading: "かぜ", meaning: "wind", kanji: ["風"] },
+            { word: "星", reading: "ほし", meaning: "star", kanji: ["星"] },
+            { word: "高い", reading: "たかい", meaning: "high / expensive", kanji: ["高"] },
+            { word: "長い", reading: "ながい", meaning: "long", kanji: ["長"] },
+            { word: "弱い", reading: "よわい", meaning: "weak", kanji: ["弱"] },
+            { word: "強い", reading: "つよい", meaning: "strong", kanji: ["強"] },
+            { word: "黒い", reading: "くろい", meaning: "black", kanji: ["黒"] },
+            { word: "黄色い", reading: "きいろい", meaning: "yellow", kanji: ["黄", "色"] },
+            { word: "新しい", reading: "あたらしい", meaning: "new", kanji: ["新"] },
+            { word: "古い", reading: "ふるい", meaning: "old (things)", kanji: ["古"] },
+            { word: "近い", reading: "ちかい", meaning: "near", kanji: ["近"] },
+            { word: "遠い", reading: "とおい", meaning: "far", kanji: ["遠"] },
+            { word: "多い", reading: "おおい", meaning: "many", kanji: ["多"] },
+            { word: "少ない", reading: "すくない", meaning: "few", kanji: ["少"] },
+            { word: "広い", reading: "ひろい", meaning: "wide / spacious", kanji: ["広"] },
+            { word: "楽しい", reading: "たのしい", meaning: "fun / enjoyable", kanji: ["楽"] },
+            { word: "茶", reading: "ちゃ", meaning: "tea", kanji: ["茶"] },
+            { word: "米", reading: "こめ", meaning: "rice (uncooked)", kanji: ["米"] },
+            { word: "肉", reading: "にく", meaning: "meat", kanji: ["肉"] },
+            { word: "絵", reading: "え", meaning: "picture / painting", kanji: ["絵"] },
+            { word: "歌", reading: "うた", meaning: "song", kanji: ["歌"] },
+            { word: "歌う", reading: "うたう", meaning: "to sing", kanji: ["歌"] },
+            { word: "答える", reading: "こたえる", meaning: "to answer", kanji: ["答"] },
+            { word: "道", reading: "みち", meaning: "road / path", kanji: ["道"] },
+            { word: "京都", reading: "きょうと", meaning: "Kyoto", kanji: ["京"] },
+            { word: "東京", reading: "とうきょう", meaning: "Tokyo", kanji: ["東", "京"] },
+            { word: "国", reading: "くに", meaning: "country", kanji: ["国"] },
+            { word: "外国", reading: "がいこく", meaning: "foreign country", kanji: ["外", "国"] },
+            // Grade 3+ vocabulary
+            { word: "世界", reading: "せかい", meaning: "world", kanji: ["世", "界"] },
+            { word: "仕事", reading: "しごと", meaning: "work / job", kanji: ["仕", "事"] },
+            { word: "勉強", reading: "べんきょう", meaning: "study", kanji: ["勉", "強"] },
+            { word: "練習", reading: "れんしゅう", meaning: "practice", kanji: ["練", "習"] },
+            { word: "旅行", reading: "りょこう", meaning: "travel / trip", kanji: ["旅", "行"] },
+            { word: "病院", reading: "びょういん", meaning: "hospital", kanji: ["病", "院"] },
+            { word: "銀行", reading: "ぎんこう", meaning: "bank", kanji: ["銀", "行"] },
+            { word: "駅", reading: "えき", meaning: "train station", kanji: ["駅"] },
+            { word: "映画", reading: "えいが", meaning: "movie", kanji: ["映", "画"] },
+            { word: "写真", reading: "しゃしん", meaning: "photograph", kanji: ["写", "真"] },
+            { word: "問題", reading: "もんだい", meaning: "problem / question", kanji: ["問", "題"] },
+            { word: "意味", reading: "いみ", meaning: "meaning", kanji: ["意", "味"] },
+            { word: "感じ", reading: "かんじ", meaning: "feeling / kanji", kanji: ["感"] },
+            { word: "漢字", reading: "かんじ", meaning: "kanji", kanji: ["漢", "字"] },
+            { word: "運動", reading: "うんどう", meaning: "exercise / sports", kanji: ["運", "動"] },
+            { word: "野菜", reading: "やさい", meaning: "vegetables", kanji: ["野", "菜"] }
+        ];
+
+        // Get all unique readings for distractors
+        function getAllReadings() {
+            return [...new Set(VOCABULARY.map(v => v.reading))];
+        }
+
+        // Get available vocab (words where all kanji are learned)
+        function getAvailableVocab() {
+            return VOCABULARY.filter(v => v.kanji.every(k => learnedKanji.has(k)));
+        }
+
+        // SRS Algorithm (simplified SM-2)
+        function getSRSInterval(item) {
+            const data = srsData[item.word] || { level: 0, nextReview: 0, easeFactor: 2.5 };
+            return data;
+        }
+
+        function updateSRS(word, correct) {
+            const now = Date.now();
+            const data = srsData[word] || { level: 0, nextReview: 0, easeFactor: 2.5 };
+
+            if (correct) {
+                data.level = Math.min(data.level + 1, 8);
+                // Intervals: 1min, 10min, 1hr, 8hr, 1day, 3day, 1week, 2weeks, 1month
+                const intervals = [60000, 600000, 3600000, 28800000, 86400000, 259200000, 604800000, 1209600000, 2592000000];
+                data.nextReview = now + intervals[Math.min(data.level, intervals.length - 1)];
+                data.easeFactor = Math.min(data.easeFactor + 0.1, 3.0);
+            } else {
+                data.level = Math.max(0, data.level - 2);
+                data.nextReview = now + 60000; // Review again in 1 min
+                data.easeFactor = Math.max(1.3, data.easeFactor - 0.2);
+            }
+
+            srsData[word] = data;
+            localStorage.setItem('srsData', JSON.stringify(srsData));
+        }
+
+        // Get items due for review
+        function getDueReviews() {
+            const now = Date.now();
+            const available = getAvailableVocab();
+
+            // Items due for review (past their nextReview time)
+            const due = available.filter(v => {
+                const data = srsData[v.word];
+                if (!data) return true; // New items are due
+                return data.nextReview <= now;
+            });
+
+            // Sort: new items first, then by nextReview time
+            due.sort((a, b) => {
+                const aData = srsData[a.word];
+                const bData = srsData[b.word];
+                if (!aData && bData) return -1;
+                if (aData && !bData) return 1;
+                if (!aData && !bData) return 0;
+                return aData.nextReview - bData.nextReview;
+            });
+
+            return due;
+        }
+
         function init() {
             checkStreak();
             renderGradeSections();
             updateStats();
             renderHistory();
+            updateReviewButton();
         }
 
         function checkStreak() {
@@ -1109,6 +1536,7 @@
             renderGradeSections();
             updateStats();
             renderHistory();
+            updateReviewButton(); // New vocab may be available
         }
 
         function save() {
@@ -1228,11 +1656,144 @@
             }
         }
 
+        // Review Session Functions
+        function updateReviewButton() {
+            const due = getDueReviews();
+            const btn = document.getElementById('review-btn');
+            const count = document.getElementById('review-count');
+
+            count.textContent = due.length;
+            btn.disabled = due.length === 0;
+        }
+
+        function startReviewSession() {
+            const due = getDueReviews();
+            if (due.length === 0) return;
+
+            // Take up to 10 items for this session
+            reviewSession.queue = due.slice(0, 10);
+            reviewSession.current = null;
+            reviewSession.correct = 0;
+            reviewSession.wrong = 0;
+
+            document.getElementById('review-correct').textContent = '0';
+            document.getElementById('review-wrong').textContent = '0';
+
+            const modal = document.getElementById('review-modal');
+            document.body.classList.add('modal-open');
+            modal.classList.add('active');
+
+            nextReviewCard();
+        }
+
+        function nextReviewCard() {
+            const feedback = document.getElementById('review-feedback');
+            feedback.className = 'review-feedback';
+            feedback.innerHTML = '';
+
+            document.getElementById('review-next-btn').style.display = 'none';
+
+            if (reviewSession.queue.length === 0) {
+                // Session complete
+                showSessionComplete();
+                return;
+            }
+
+            reviewSession.current = reviewSession.queue.shift();
+            displayReviewCard(reviewSession.current);
+        }
+
+        function displayReviewCard(item) {
+            document.getElementById('review-word').textContent = item.word;
+
+            // Generate choices: correct answer + 3 distractors
+            const allReadings = getAllReadings();
+            const distractors = allReadings
+                .filter(r => r !== item.reading)
+                .sort(() => Math.random() - 0.5)
+                .slice(0, 3);
+
+            const choices = [item.reading, ...distractors].sort(() => Math.random() - 0.5);
+
+            const container = document.getElementById('reading-choices');
+            container.innerHTML = choices.map(reading => `
+                <button class="reading-choice" onclick="checkAnswer('${reading}')">${reading}</button>
+            `).join('');
+        }
+
+        function checkAnswer(selected) {
+            const item = reviewSession.current;
+            const correct = selected === item.reading;
+
+            // Update SRS
+            updateSRS(item.word, correct);
+
+            // Update session stats
+            if (correct) {
+                reviewSession.correct++;
+                document.getElementById('review-correct').textContent = reviewSession.correct;
+            } else {
+                reviewSession.wrong++;
+                document.getElementById('review-wrong').textContent = reviewSession.wrong;
+                // Add back to queue for retry
+                reviewSession.queue.push(item);
+            }
+
+            // Mark buttons
+            const buttons = document.querySelectorAll('.reading-choice');
+            buttons.forEach(btn => {
+                btn.disabled = true;
+                if (btn.textContent === item.reading) {
+                    btn.classList.add('correct');
+                } else if (btn.textContent === selected && !correct) {
+                    btn.classList.add('incorrect');
+                }
+            });
+
+            // Show feedback
+            const feedback = document.getElementById('review-feedback');
+            if (correct) {
+                feedback.className = 'review-feedback correct';
+                feedback.innerHTML = `<div>Correct!</div><div class="meaning">${item.meaning}</div>`;
+            } else {
+                feedback.className = 'review-feedback incorrect';
+                feedback.innerHTML = `<div>The answer is: ${item.reading}</div><div class="meaning">${item.meaning}</div>`;
+            }
+
+            // Show next button
+            document.getElementById('review-next-btn').style.display = 'inline-block';
+        }
+
+        function showSessionComplete() {
+            document.getElementById('review-word').textContent = '完了!';
+            document.getElementById('reading-choices').innerHTML = '';
+
+            const feedback = document.getElementById('review-feedback');
+            const total = reviewSession.correct + reviewSession.wrong;
+            const accuracy = total > 0 ? Math.round((reviewSession.correct / total) * 100) : 0;
+
+            feedback.className = 'review-feedback correct';
+            feedback.innerHTML = `
+                <div style="font-size: 1.2rem;">Session Complete</div>
+                <div class="meaning">${accuracy}% accuracy</div>
+            `;
+
+            document.getElementById('review-next-btn').style.display = 'none';
+            updateReviewButton();
+        }
+
+        function closeReviewModal() {
+            document.getElementById('review-modal').classList.remove('active');
+            document.body.classList.remove('modal-open');
+            updateReviewButton();
+        }
+
         // Close modal on escape
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 closeModal();
                 closeShareModal();
+                closeReviewModal();
             }
         });
 
@@ -1243,6 +1804,10 @@
 
         document.getElementById('share-modal').addEventListener('click', (e) => {
             if (e.target.id === 'share-modal') closeShareModal();
+        });
+
+        document.getElementById('review-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'review-modal') closeReviewModal();
         });
 
         init();
