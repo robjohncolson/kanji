@@ -6,7 +6,7 @@
     <title>漢字の道 — Kanji Journey to Japan</title>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Noto+Serif+JP:wght@400;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/hanzi-writer@3.5/dist/hanzi-writer.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
     <style>
         :root {
             --ink: #1a1a1a;
@@ -897,8 +897,8 @@
         <div class="modal-content share-modal-content">
             <button class="close-modal" onclick="closeShareModal()">&times;</button>
             <h3>共有 — Share the Journey</h3>
-            <div class="qr-container">
-                <canvas id="qr-canvas"></canvas>
+            <div class="qr-container" id="qr-container">
+                <!-- QR code generated here -->
             </div>
             <p style="font-size: 0.8rem; color: var(--stone); margin-bottom: 1rem;">
                 Scan to open on another device
@@ -1612,13 +1612,24 @@
             document.body.classList.add('modal-open');
             modal.classList.add('active');
 
-            // Generate QR code
-            const canvas = document.getElementById('qr-canvas');
-            QRCode.toCanvas(canvas, SHARE_URL, {
-                width: 180,
-                margin: 2,
-                color: { dark: '#1a1a1a', light: '#ffffff' }
-            });
+            // Generate QR code using qrcode-generator library
+            const container = document.getElementById('qr-container');
+            try {
+                const qr = qrcode(0, 'M');
+                qr.addData(SHARE_URL);
+                qr.make();
+
+                // Create image from QR code
+                container.innerHTML = qr.createImgTag(5, 10);
+                // Style the generated image
+                const img = container.querySelector('img');
+                if (img) {
+                    img.style.display = 'block';
+                }
+            } catch (err) {
+                console.error('QR generation failed:', err);
+                container.innerHTML = '<div style="padding: 2rem; color: #666;">QR unavailable</div>';
+            }
 
             // Show native share button if supported
             if (navigator.share) {
