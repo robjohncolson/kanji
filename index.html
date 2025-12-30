@@ -1578,12 +1578,12 @@
             return [...learnedKanji].filter(k => !vocabKanji.has(k) && KANJI_READINGS[k]);
         }
 
-        // Create reading cards for kanji without vocab - ONE CARD PER READING
+        // Create reading cards for ALL learned kanji - ONE CARD PER READING
         function getReadingCards() {
-            const uncoveredKanji = getKanjiWithoutVocab();
             const cards = [];
 
-            uncoveredKanji.forEach(k => {
+            // Create cards for ALL learned kanji, not just those without vocab
+            [...learnedKanji].forEach(k => {
                 const readings = KANJI_READINGS[k] || [];
                 readings.forEach((reading, index) => {
                     cards.push({
