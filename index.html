@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>漢字の道 — Kanji Journey to Japan</title>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Noto+Serif+JP:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/hanzi-writer@3.5/dist/hanzi-writer.min.js"></script>
     <style>
         :root {
             --ink: #1a1a1a;
@@ -152,6 +153,30 @@
         .btn-secondary:hover {
             border-color: var(--ink);
             color: var(--ink);
+        }
+
+        .mode-toggle {
+            display: flex;
+            background: var(--paper);
+            border: 1px solid var(--mist);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .mode-btn {
+            padding: 0.5rem 0.8rem;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            font-size: 0.8rem;
+            font-family: 'Noto Sans JP', sans-serif;
+            transition: all 0.2s;
+            color: var(--stone);
+        }
+
+        .mode-btn.active {
+            background: var(--ink);
+            color: var(--paper);
         }
 
         .selection-count {
@@ -341,12 +366,141 @@
             color: var(--mist);
         }
 
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(26, 26, 26, 0.85);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+            backdrop-filter: blur(4px);
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .modal-content {
+            background: var(--paper);
+            padding: 2rem;
+            border-radius: 2px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            text-align: center;
+            max-width: 90%;
+            width: 380px;
+            position: relative;
+            border: 1px solid var(--mist);
+        }
+
+        .modal-header {
+            font-family: 'Noto Serif JP', serif;
+            font-size: 1.3rem;
+            margin-bottom: 1.5rem;
+            color: var(--ink);
+        }
+
+        .modal-header .target-char {
+            font-size: 2rem;
+            color: var(--vermillion);
+        }
+
+        .writer-container {
+            width: 280px;
+            height: 280px;
+            margin: 0 auto 1.5rem;
+            border: 1px solid var(--stone);
+            background: white;
+            position: relative;
+        }
+
+        /* 4x4 Grid overlay */
+        .writer-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image:
+                linear-gradient(var(--mist) 1px, transparent 1px),
+                linear-gradient(90deg, var(--mist) 1px, transparent 1px);
+            background-size: 70px 70px;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        /* Cross guidelines */
+        .writer-container::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background:
+                linear-gradient(var(--mist) 1px, transparent 1px) 0 139px / 100% 2px no-repeat,
+                linear-gradient(90deg, var(--mist) 1px, transparent 1px) 139px 0 / 2px 100% no-repeat;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 0.75rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .close-modal {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            color: var(--stone);
+            cursor: pointer;
+            line-height: 1;
+        }
+
+        .close-modal:hover {
+            color: var(--ink);
+        }
+
+        .modal-status {
+            margin-top: 1rem;
+            font-size: 0.85rem;
+            color: var(--stone);
+            min-height: 1.2em;
+        }
+
+        .modal-status.success {
+            color: var(--gold);
+            font-weight: 600;
+        }
+
+        .modal-status.error {
+            color: var(--vermillion);
+        }
+
         @media (max-width: 600px) {
             .kanji-grid { grid-template-columns: repeat(auto-fill, minmax(38px, 1fr)); }
             .kanji-char { font-size: 1.2rem; }
             .stats-row { gap: 0.5rem; }
             .stat-card { padding: 0.75rem; }
             .stat-value { font-size: 1.5rem; }
+            .writer-container { width: 240px; height: 240px; }
+            .writer-container::before { background-size: 60px 60px; }
+            .modal-content { padding: 1.5rem; }
         }
     </style>
 </head>
@@ -386,9 +540,13 @@
         </div>
 
         <div class="action-bar">
+            <div class="mode-toggle">
+                <button class="mode-btn active" id="mode-select" onclick="setMode('select')">Batch Select</button>
+                <button class="mode-btn" id="mode-practice" onclick="setMode('practice')">Practice</button>
+            </div>
             <button class="btn btn-primary" id="log-btn" disabled>Log Selected</button>
-            <button class="btn btn-secondary" id="clear-btn">Clear Selection</button>
-            <span class="selection-count"><strong id="selected-count">0</strong> selected</span>
+            <button class="btn btn-secondary" id="clear-btn">Clear</button>
+            <span class="selection-count" id="selection-info"><strong id="selected-count">0</strong> selected</span>
         </div>
 
         <div id="grade-sections"></div>
@@ -407,6 +565,23 @@
         </div>
     </div>
 
+    <!-- Practice Modal -->
+    <div class="modal-overlay" id="practice-modal">
+        <div class="modal-content">
+            <button class="close-modal" onclick="closeModal()">&times;</button>
+            <div class="modal-header">
+                Practice: <span class="target-char" id="modal-target"></span>
+            </div>
+            <div class="writer-container" id="writer-target"></div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="showAnimation()">Show Strokes</button>
+                <button class="btn btn-secondary" onclick="retryQuiz()">Retry</button>
+                <button class="btn btn-secondary" onclick="skipKanji()">Skip</button>
+            </div>
+            <div class="modal-status" id="modal-status"></div>
+        </div>
+    </div>
+
     <script>
         // Kanji Data by Grade
         const KANJI_BY_GRADE = {
@@ -414,7 +589,7 @@
             2: "刀丸弓工才万引牛元戸午公今止少心切太内父分方毛友外兄古広市矢台冬半母北用羽回会交光考行合寺自色西多地池当同肉米毎何角汽近形言谷作社図声走体弟売麦来里画岩京国姉知長直店東歩妹明門夜科海活計後思室首秋春食星前茶昼点南風夏家記帰原高紙時弱書通馬魚強教黄黒細週雪船組鳥野理雲絵間場晴朝答道買番園遠楽新数電話歌語算読聞鳴線親頭顔曜",
             3: "丁化区反予央去号皿仕写主申世他打代皮氷平由礼安曲血向死次式守州全有羊両列医究局君決住助身対投豆坂返役委育泳岸苦具幸使始事実者取受所昔注定波板表服物放味命油和屋界客急級係研県指持拾重昭乗神相送待炭柱追度畑発美秒品負面洋員院荷起宮庫根酒消真息速庭島配倍病勉流旅悪球祭終習宿商章深進族第帳笛転都動部問飲運温開階寒期軽湖港歯集暑勝植短着湯登等童悲筆遊葉陽落暗意感漢業詩想鉄農福路駅銀鼻様緑練横談調箱館橋整薬題",
             4: "欠氏井不夫以加功札司失必付辺包末未民令衣印各共好成争仲兆伝灯老位改完岐希求芸佐材児初臣折束沖低努阪兵別利良冷労英岡果芽官季泣協径固刷参治周松卒底的典奈念府阜法牧例茨栄軍建香昨祝城信省浅単栃飛変便約勇要案害挙訓郡候差残借笑席倉孫帯徒特梅浴料連貨械健康菜埼崎産鹿唱清巣側梨敗票副望陸媛賀街覚給極景結最散滋順焼然隊達博飯富満無量愛塩群試辞照節戦続置働管関旗漁熊察種静説徳億課潟器縄選熱標養輪機積録観験類願鏡議競",
-            5: "久士支比仏圧永可刊旧句史示犯布弁因仮件再在団任囲応快技均告災志似序条状判防余易往価河居効妻枝舎述招制性毒版肥非武紀逆型限故厚査政祖則独保迷益桜格個耕航財殺師修素造能破粉脈容留移液眼基寄規救許経険現混採授術常情責接設率断張停堂得貧婦務略営過喜検減証象税絶測属貸貯提程統費備評復報貿解幹義禁鉱罪資飼準勢損墓豊夢演慣境構際雑酸精製総像増態適銅複綿領歴確潔賛質賞導編暴衛興築燃輸講謝績額織職識護",
+            5: "久士支比仏圧永可刊旧句史示犯布弁因仮件再在団任囲応快技均告災志似序条状判防余易往価河居効妻枝舎述招制性毒版肥非武紀逆型限故厚査政祖則独保迷益桜格個耕航財殺師修素造能破粉脈容留移液眼基寄規救許経験現混採授術常情責接設率断張停堂得貧婦務略営過喜検減証象税絶測属貸貯提程統費備評復報貿解幹義禁鉱罪資飼準勢損墓豊夢演慣境構際雑酸精製総像増態適銅複綿領歴確潔賛質賞導編暴衛興築燃輸講謝績額織職識護",
             6: "干己寸亡尺収仁片穴冊処庁幼宇灰危机吸后至舌存宅我系孝困私否批忘乱卵延沿拡供券呼刻若宗承垂担宙忠届乳拝並宝枚胃映革巻看皇紅砂姿宣専泉洗染奏退段派背肺律恩株胸降骨座蚕射従純除将針値展討党納俳班秘俵陛朗異域郷済視捨推盛窓探著頂脳閉訪密訳郵欲翌割揮貴勤筋敬裁策詞就衆善創装尊痛晩補棒絹源署傷蒸聖誠暖腸賃腹幕盟預裏閣疑誤穀誌磁障銭層認暮模遺劇権熟諸蔵誕潮敵論激憲鋼樹縦操糖奮厳縮優覧簡難臨警臓"
         };
 
@@ -434,7 +609,10 @@
         let learnedKanji = new Set(JSON.parse(localStorage.getItem('learnedKanji') || '[]'));
         let selectedKanji = new Set();
         let history = JSON.parse(localStorage.getItem('kanjiHistory') || '[]');
-        let expandedGrades = new Set([1]); // Start with grade 1 expanded
+        let expandedGrades = new Set([1]);
+        let currentMode = 'select'; // 'select' or 'practice'
+        let writer = null;
+        let currentPracticeChar = null;
 
         function init() {
             renderGradeSections();
@@ -443,6 +621,22 @@
 
             document.getElementById('log-btn').addEventListener('click', logSelected);
             document.getElementById('clear-btn').addEventListener('click', clearSelection);
+        }
+
+        // Mode switching
+        function setMode(mode) {
+            currentMode = mode;
+            document.getElementById('mode-select').classList.toggle('active', mode === 'select');
+            document.getElementById('mode-practice').classList.toggle('active', mode === 'practice');
+
+            // Update UI hints
+            const info = document.getElementById('selection-info');
+            if (mode === 'practice') {
+                info.innerHTML = '<span style="color: var(--stone)">Click any kanji to practice</span>';
+                clearSelection();
+            } else {
+                info.innerHTML = '<strong id="selected-count">0</strong> selected';
+            }
         }
 
         function renderGradeSections() {
@@ -505,27 +699,167 @@
                     div.classList.add('selected');
                 }
 
-                div.onclick = () => toggleKanji(char, div);
+                div.onclick = () => handleKanjiClick(char, div);
                 container.appendChild(div);
             }
         }
 
-        function toggleKanji(char, element) {
-            if (learnedKanji.has(char)) return; // Already learned
-
-            if (selectedKanji.has(char)) {
-                selectedKanji.delete(char);
-                element.classList.remove('selected');
+        function handleKanjiClick(char, element) {
+            if (currentMode === 'practice') {
+                openPracticeModal(char);
             } else {
-                selectedKanji.add(char);
-                element.classList.add('selected');
-            }
+                // Select mode - original behavior
+                if (learnedKanji.has(char)) return;
 
-            updateSelectionCount();
+                if (selectedKanji.has(char)) {
+                    selectedKanji.delete(char);
+                    element.classList.remove('selected');
+                } else {
+                    selectedKanji.add(char);
+                    element.classList.add('selected');
+                }
+                updateSelectionCount();
+            }
+        }
+
+        // Practice Modal
+        function openPracticeModal(char) {
+            currentPracticeChar = char;
+            const modal = document.getElementById('practice-modal');
+            const target = document.getElementById('writer-target');
+
+            document.getElementById('modal-target').textContent = char;
+            document.getElementById('modal-status').textContent = '';
+            document.getElementById('modal-status').className = 'modal-status';
+
+            modal.classList.add('active');
+            target.innerHTML = '';
+
+            // Create HanziWriter with Japanese data preference
+            writer = HanziWriter.create('writer-target', char, {
+                width: 280,
+                height: 280,
+                padding: 20,
+                showOutline: true,
+                strokeAnimationSpeed: 1.5,
+                delayBetweenStrokes: 150,
+                strokeColor: '#1a1a1a',
+                radicalColor: '#d73b3e',
+                highlightColor: '#c9a227',
+                outlineColor: '#e8e4dc',
+                drawingColor: '#1a1a1a',
+                leniency: 1.2, // Slightly forgiving
+                showHintAfterMisses: 3,
+                charDataLoader: function(char, onComplete) {
+                    // Try Japanese data first, fallback to default
+                    fetch(`https://cdn.jsdelivr.net/npm/hanzi-writer-data-jp@2.0/${char}.json`)
+                        .then(res => {
+                            if (!res.ok) throw new Error('JP data not found');
+                            return res.json();
+                        })
+                        .then(onComplete)
+                        .catch(() => {
+                            // Fallback to default Chinese data
+                            fetch(`https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0/${char}.json`)
+                                .then(res => res.json())
+                                .then(onComplete)
+                                .catch(err => {
+                                    document.getElementById('modal-status').textContent =
+                                        'Stroke data unavailable for this kanji';
+                                    document.getElementById('modal-status').className = 'modal-status error';
+                                });
+                        });
+                }
+            });
+
+            // Start quiz mode
+            startQuiz();
+        }
+
+        function startQuiz() {
+            if (!writer) return;
+
+            writer.quiz({
+                onMistake: function(strokeData) {
+                    document.getElementById('modal-status').textContent =
+                        `Stroke ${strokeData.strokeNum + 1}: Try again`;
+                    document.getElementById('modal-status').className = 'modal-status error';
+                },
+                onCorrectStroke: function(strokeData) {
+                    document.getElementById('modal-status').textContent = '';
+                },
+                onComplete: function(summaryData) {
+                    // Success!
+                    document.getElementById('modal-status').textContent = 'Mastered!';
+                    document.getElementById('modal-status').className = 'modal-status success';
+
+                    // Auto-mark as learned after brief delay
+                    setTimeout(() => {
+                        markAsLearned(currentPracticeChar);
+                        closeModal();
+                    }, 800);
+                }
+            });
+        }
+
+        function showAnimation() {
+            if (writer) {
+                writer.cancelQuiz();
+                writer.animateCharacter({
+                    onComplete: () => {
+                        setTimeout(startQuiz, 500);
+                    }
+                });
+            }
+        }
+
+        function retryQuiz() {
+            if (writer) {
+                writer.cancelQuiz();
+                document.getElementById('modal-status').textContent = '';
+                document.getElementById('modal-status').className = 'modal-status';
+                startQuiz();
+            }
+        }
+
+        function skipKanji() {
+            closeModal();
+        }
+
+        function closeModal() {
+            document.getElementById('practice-modal').classList.remove('active');
+            if (writer) {
+                writer.cancelQuiz();
+                writer = null;
+            }
+            currentPracticeChar = null;
+        }
+
+        function markAsLearned(char) {
+            if (learnedKanji.has(char)) return;
+
+            learnedKanji.add(char);
+
+            const entry = {
+                id: Date.now(),
+                date: new Date().toISOString(),
+                kanji: char,
+                count: 1,
+                method: 'practice'
+            };
+            history.unshift(entry);
+
+            save();
+            renderGradeSections();
+            updateStats();
+            renderHistory();
         }
 
         function updateSelectionCount() {
-            document.getElementById('selected-count').textContent = selectedKanji.size;
+            const countEl = document.getElementById('selected-count');
+            if (countEl) {
+                countEl.textContent = selectedKanji.size;
+            }
             document.getElementById('log-btn').disabled = selectedKanji.size === 0;
         }
 
@@ -537,18 +871,14 @@
                 id: Date.now(),
                 date: new Date().toISOString(),
                 kanji: chars.join(''),
-                count: chars.length
+                count: chars.length,
+                method: 'batch'
             };
 
-            // Add to learned
             chars.forEach(k => learnedKanji.add(k));
             history.unshift(entry);
 
-            // Save
-            localStorage.setItem('learnedKanji', JSON.stringify([...learnedKanji]));
-            localStorage.setItem('kanjiHistory', JSON.stringify(history));
-
-            // Reset
+            save();
             selectedKanji.clear();
             updateSelectionCount();
             renderGradeSections();
@@ -560,6 +890,11 @@
             selectedKanji.clear();
             updateSelectionCount();
             renderGradeSections();
+        }
+
+        function save() {
+            localStorage.setItem('learnedKanji', JSON.stringify([...learnedKanji]));
+            localStorage.setItem('kanjiHistory', JSON.stringify(history));
         }
 
         function updateStats() {
@@ -594,9 +929,10 @@
             container.innerHTML = history.slice(0, 10).map(entry => {
                 const date = new Date(entry.date);
                 const formatted = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                const icon = entry.method === 'practice' ? '✍' : '';
                 return `
                     <div class="history-item">
-                        <span class="history-kanji">${entry.kanji}</span>
+                        <span class="history-kanji">${icon}${entry.kanji}</span>
                         <div class="history-meta">
                             <div class="history-count">+${entry.count}</div>
                             <div>${formatted}</div>
@@ -619,6 +955,16 @@
             a.download = `kanji-journey-${new Date().toISOString().split('T')[0]}.json`;
             a.click();
         }
+
+        // Close modal on escape
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeModal();
+        });
+
+        // Close modal on overlay click
+        document.getElementById('practice-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'practice-modal') closeModal();
+        });
 
         init();
     </script>
