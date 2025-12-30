@@ -277,11 +277,6 @@
             z-index: 1;
         }
 
-        .kanji-char.selected {
-            background: rgba(215, 59, 62, 0.15);
-            border-color: var(--vermillion);
-        }
-
         .kanji-char.learned {
             background: var(--gold-light);
             border-color: var(--gold);
@@ -540,13 +535,7 @@
         </div>
 
         <div class="action-bar">
-            <div class="mode-toggle">
-                <button class="mode-btn active" id="mode-select" onclick="setMode('select')">Batch Select</button>
-                <button class="mode-btn" id="mode-practice" onclick="setMode('practice')">Practice</button>
-            </div>
-            <button class="btn btn-primary" id="log-btn" disabled>Log Selected</button>
-            <button class="btn btn-secondary" id="clear-btn">Clear</button>
-            <span class="selection-count" id="selection-info"><strong id="selected-count">0</strong> selected</span>
+            <span class="selection-count" id="selection-info">Click any kanji to practice strokes</span>
         </div>
 
         <div id="grade-sections"></div>
@@ -573,10 +562,14 @@
                 Practice: <span class="target-char" id="modal-target"></span>
             </div>
             <div class="writer-container" id="writer-target"></div>
-            <div class="modal-actions">
+            <div class="modal-actions" id="modal-actions-main">
                 <button class="btn btn-secondary" onclick="showAnimation()">Show Strokes</button>
                 <button class="btn btn-secondary" onclick="retryQuiz()">Retry</button>
                 <button class="btn btn-secondary" onclick="skipKanji()">Skip</button>
+            </div>
+            <div class="modal-actions" id="modal-actions-fallback" style="display: none;">
+                <button class="btn btn-primary" onclick="markLearnedAnyway()">Mark Learned Anyway</button>
+                <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
             </div>
             <div class="modal-status" id="modal-status"></div>
         </div>
@@ -607,36 +600,16 @@
 
         // State
         let learnedKanji = new Set(JSON.parse(localStorage.getItem('learnedKanji') || '[]'));
-        let selectedKanji = new Set();
         let history = JSON.parse(localStorage.getItem('kanjiHistory') || '[]');
         let expandedGrades = new Set([1]);
-        let currentMode = 'select'; // 'select' or 'practice'
         let writer = null;
         let currentPracticeChar = null;
+        let strokeDataLoaded = false;
 
         function init() {
             renderGradeSections();
             updateStats();
             renderHistory();
-
-            document.getElementById('log-btn').addEventListener('click', logSelected);
-            document.getElementById('clear-btn').addEventListener('click', clearSelection);
-        }
-
-        // Mode switching
-        function setMode(mode) {
-            currentMode = mode;
-            document.getElementById('mode-select').classList.toggle('active', mode === 'select');
-            document.getElementById('mode-practice').classList.toggle('active', mode === 'practice');
-
-            // Update UI hints
-            const info = document.getElementById('selection-info');
-            if (mode === 'practice') {
-                info.innerHTML = '<span style="color: var(--stone)">Click any kanji to practice</span>';
-                clearSelection();
-            } else {
-                info.innerHTML = '<strong id="selected-count">0</strong> selected';
-            }
         }
 
         function renderGradeSections() {
@@ -695,8 +668,6 @@
 
                 if (learnedKanji.has(char)) {
                     div.classList.add('learned');
-                } else if (selectedKanji.has(char)) {
-                    div.classList.add('selected');
                 }
 
                 div.onclick = () => handleKanjiClick(char, div);
@@ -705,32 +676,25 @@
         }
 
         function handleKanjiClick(char, element) {
-            if (currentMode === 'practice') {
-                openPracticeModal(char);
-            } else {
-                // Select mode - original behavior
-                if (learnedKanji.has(char)) return;
-
-                if (selectedKanji.has(char)) {
-                    selectedKanji.delete(char);
-                    element.classList.remove('selected');
-                } else {
-                    selectedKanji.add(char);
-                    element.classList.add('selected');
-                }
-                updateSelectionCount();
-            }
+            // Always open practice modal - practice required to mark as learned
+            openPracticeModal(char);
         }
 
         // Practice Modal
         function openPracticeModal(char) {
             currentPracticeChar = char;
+            strokeDataLoaded = false;
+
             const modal = document.getElementById('practice-modal');
             const target = document.getElementById('writer-target');
 
             document.getElementById('modal-target').textContent = char;
             document.getElementById('modal-status').textContent = '';
             document.getElementById('modal-status').className = 'modal-status';
+
+            // Reset action buttons visibility
+            document.getElementById('modal-actions-main').style.display = 'flex';
+            document.getElementById('modal-actions-fallback').style.display = 'none';
 
             modal.classList.add('active');
             target.innerHTML = '';
@@ -750,23 +714,32 @@
                 drawingColor: '#1a1a1a',
                 leniency: 1.2, // Slightly forgiving
                 showHintAfterMisses: 3,
-                charDataLoader: function(char, onComplete) {
-                    // Try Japanese data first, fallback to default
-                    fetch(`https://cdn.jsdelivr.net/npm/hanzi-writer-data-jp@2.0/${char}.json`)
+                charDataLoader: function(char, onComplete, onErr) {
+                    // Try Japanese data first (@jamsch package), fallback to Chinese
+                    fetch(`https://cdn.jsdelivr.net/npm/@jamsch/hanzi-writer-data-jp@2.0.2/${char}.json`)
                         .then(res => {
                             if (!res.ok) throw new Error('JP data not found');
                             return res.json();
                         })
-                        .then(onComplete)
+                        .then(data => {
+                            strokeDataLoaded = true;
+                            onComplete(data);
+                        })
                         .catch(() => {
                             // Fallback to default Chinese data
                             fetch(`https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0/${char}.json`)
-                                .then(res => res.json())
-                                .then(onComplete)
+                                .then(res => {
+                                    if (!res.ok) throw new Error('Data not found');
+                                    return res.json();
+                                })
+                                .then(data => {
+                                    strokeDataLoaded = true;
+                                    onComplete(data);
+                                })
                                 .catch(err => {
-                                    document.getElementById('modal-status').textContent =
-                                        'Stroke data unavailable for this kanji';
-                                    document.getElementById('modal-status').className = 'modal-status error';
+                                    strokeDataLoaded = false;
+                                    showDataUnavailable();
+                                    if (onErr) onErr(err);
                                 });
                         });
                 }
@@ -826,6 +799,23 @@
             closeModal();
         }
 
+        function showDataUnavailable() {
+            // Show fallback UI when stroke data can't be loaded
+            document.getElementById('modal-actions-main').style.display = 'none';
+            document.getElementById('modal-actions-fallback').style.display = 'flex';
+            document.getElementById('modal-status').textContent =
+                'Stroke data unavailable — network error or unsupported kanji';
+            document.getElementById('modal-status').className = 'modal-status error';
+        }
+
+        function markLearnedAnyway() {
+            // Fallback: mark as learned without practice (only when data unavailable)
+            if (currentPracticeChar) {
+                markAsLearned(currentPracticeChar, 'fallback');
+                closeModal();
+            }
+        }
+
         function closeModal() {
             document.getElementById('practice-modal').classList.remove('active');
             if (writer) {
@@ -835,7 +825,7 @@
             currentPracticeChar = null;
         }
 
-        function markAsLearned(char) {
+        function markAsLearned(char, method = 'practice') {
             if (learnedKanji.has(char)) return;
 
             learnedKanji.add(char);
@@ -845,7 +835,7 @@
                 date: new Date().toISOString(),
                 kanji: char,
                 count: 1,
-                method: 'practice'
+                method: method // 'practice' or 'fallback'
             };
             history.unshift(entry);
 
@@ -853,43 +843,6 @@
             renderGradeSections();
             updateStats();
             renderHistory();
-        }
-
-        function updateSelectionCount() {
-            const countEl = document.getElementById('selected-count');
-            if (countEl) {
-                countEl.textContent = selectedKanji.size;
-            }
-            document.getElementById('log-btn').disabled = selectedKanji.size === 0;
-        }
-
-        function logSelected() {
-            if (selectedKanji.size === 0) return;
-
-            const chars = [...selectedKanji];
-            const entry = {
-                id: Date.now(),
-                date: new Date().toISOString(),
-                kanji: chars.join(''),
-                count: chars.length,
-                method: 'batch'
-            };
-
-            chars.forEach(k => learnedKanji.add(k));
-            history.unshift(entry);
-
-            save();
-            selectedKanji.clear();
-            updateSelectionCount();
-            renderGradeSections();
-            updateStats();
-            renderHistory();
-        }
-
-        function clearSelection() {
-            selectedKanji.clear();
-            updateSelectionCount();
-            renderGradeSections();
         }
 
         function save() {
@@ -929,7 +882,7 @@
             container.innerHTML = history.slice(0, 10).map(entry => {
                 const date = new Date(entry.date);
                 const formatted = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                const icon = entry.method === 'practice' ? '✍' : '';
+                const icon = entry.method === 'practice' ? '✍' : (entry.method === 'fallback' ? '⚠' : '');
                 return `
                     <div class="history-item">
                         <span class="history-kanji">${icon}${entry.kanji}</span>
