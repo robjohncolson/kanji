@@ -6,6 +6,7 @@
     <title>漢字の道 — Kanji Journey to Japan</title>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Noto+Serif+JP:wght@400;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/hanzi-writer@3.5/dist/hanzi-writer.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
     <style>
         :root {
             --ink: #1a1a1a;
@@ -494,6 +495,102 @@
             color: var(--vermillion);
         }
 
+        /* Share Button */
+        .share-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            background: transparent;
+            border: 1px solid var(--mist);
+            padding: 0.4rem 0.8rem;
+            border-radius: 2rem;
+            font-size: 0.75rem;
+            margin-top: 0.75rem;
+            color: var(--stone);
+            cursor: pointer;
+            font-family: 'Noto Sans JP', sans-serif;
+            transition: all 0.2s ease;
+        }
+
+        .share-btn:hover {
+            border-color: var(--vermillion);
+            color: var(--vermillion);
+        }
+
+        /* Share Modal */
+        .share-modal-content {
+            text-align: center;
+        }
+
+        .share-modal-content h3 {
+            font-family: 'Noto Serif JP', serif;
+            font-size: 1.2rem;
+            margin-bottom: 1.5rem;
+            font-weight: 400;
+        }
+
+        .qr-container {
+            background: white;
+            padding: 1rem;
+            display: inline-block;
+            margin-bottom: 1rem;
+            border: 1px solid var(--mist);
+        }
+
+        .share-url {
+            display: flex;
+            gap: 0.5rem;
+            margin: 1rem 0;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .share-url input {
+            flex: 1;
+            min-width: 200px;
+            padding: 0.5rem 0.75rem;
+            border: 1px solid var(--mist);
+            background: var(--paper);
+            font-family: 'Noto Sans JP', sans-serif;
+            font-size: 0.85rem;
+            color: var(--ink);
+        }
+
+        .share-actions {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 1rem;
+        }
+
+        .copy-feedback {
+            font-size: 0.8rem;
+            color: var(--gold);
+            min-height: 1.2em;
+            margin-top: 0.5rem;
+        }
+
+        /* Streak Badge */
+        .streak-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            background: var(--gold-light);
+            border: 1px solid var(--gold);
+            padding: 0.25rem 0.6rem;
+            border-radius: 1rem;
+            font-size: 0.7rem;
+            color: var(--gold);
+            margin-left: 0.5rem;
+        }
+
+        .streak-badge.inactive {
+            background: var(--mist);
+            border-color: var(--stone);
+            color: var(--stone);
+        }
+
         @media (max-width: 600px) {
             /* Larger kanji tiles for touch */
             .kanji-grid {
@@ -580,6 +677,9 @@
                 <span>✈</span>
                 <span>JL0007 · BOS → NRT · July 27, 2026</span>
             </div>
+            <button class="share-btn" onclick="openShareModal()" title="Share app">
+                共有
+            </button>
         </header>
 
         <div class="stats-row">
@@ -598,6 +698,10 @@
             <div class="stat-card">
                 <div class="stat-value" id="per-day">5</div>
                 <div class="stat-label">Per Day</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value gold" id="streak-count">0</div>
+                <div class="stat-label">Day Streak</div>
             </div>
         </div>
 
@@ -648,6 +752,28 @@
         </div>
     </div>
 
+    <!-- Share Modal -->
+    <div class="modal-overlay" id="share-modal">
+        <div class="modal-content share-modal-content">
+            <button class="close-modal" onclick="closeShareModal()">&times;</button>
+            <h3>共有 — Share the Journey</h3>
+            <div class="qr-container">
+                <canvas id="qr-canvas"></canvas>
+            </div>
+            <p style="font-size: 0.8rem; color: var(--stone); margin-bottom: 1rem;">
+                Scan to open on another device
+            </p>
+            <div class="share-url">
+                <input type="text" id="share-url-input" readonly value="https://robjohncolson.github.io/kanji/">
+                <button class="btn btn-secondary" onclick="copyShareUrl()">Copy</button>
+            </div>
+            <div class="share-actions" id="native-share-container" style="display: none;">
+                <button class="btn btn-primary" onclick="nativeShare()">Share via...</button>
+            </div>
+            <div class="copy-feedback" id="copy-feedback"></div>
+        </div>
+    </div>
+
     <script>
         // Kanji Data by Grade
         const KANJI_BY_GRADE = {
@@ -679,10 +805,64 @@
         let currentPracticeChar = null;
         let strokeDataLoaded = false;
 
+        // Streak tracking
+        let streakData = JSON.parse(localStorage.getItem('streakData') || '{"streak": 0, "lastPractice": null}');
+
         function init() {
+            checkStreak();
             renderGradeSections();
             updateStats();
             renderHistory();
+        }
+
+        function checkStreak() {
+            if (!streakData.lastPractice) return;
+
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const lastPractice = new Date(streakData.lastPractice);
+            lastPractice.setHours(0, 0, 0, 0);
+
+            const daysDiff = Math.floor((today - lastPractice) / (1000 * 60 * 60 * 24));
+
+            if (daysDiff > 1) {
+                // Streak broken
+                streakData.streak = 0;
+                saveStreak();
+            }
+        }
+
+        function updateStreak() {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            if (!streakData.lastPractice) {
+                // First practice ever
+                streakData.streak = 1;
+                streakData.lastPractice = today.toISOString();
+            } else {
+                const lastPractice = new Date(streakData.lastPractice);
+                lastPractice.setHours(0, 0, 0, 0);
+                const daysDiff = Math.floor((today - lastPractice) / (1000 * 60 * 60 * 24));
+
+                if (daysDiff === 1) {
+                    // Consecutive day - increment streak
+                    streakData.streak++;
+                    streakData.lastPractice = today.toISOString();
+                } else if (daysDiff === 0) {
+                    // Same day - keep streak, update timestamp
+                    streakData.lastPractice = today.toISOString();
+                } else {
+                    // Streak broken, start fresh
+                    streakData.streak = 1;
+                    streakData.lastPractice = today.toISOString();
+                }
+            }
+            saveStreak();
+        }
+
+        function saveStreak() {
+            localStorage.setItem('streakData', JSON.stringify(streakData));
         }
 
         function renderGradeSections() {
@@ -924,6 +1104,7 @@
             };
             history.unshift(entry);
 
+            updateStreak(); // Track daily practice
             save();
             renderGradeSections();
             updateStats();
@@ -949,6 +1130,7 @@
             document.getElementById('days-left').textContent = daysLeft;
             document.getElementById('per-day').textContent = perDay;
             document.getElementById('progress-fill').style.width = `${percent}%`;
+            document.getElementById('streak-count').textContent = streakData.streak;
         }
 
         function renderHistory() {
@@ -994,14 +1176,73 @@
             a.click();
         }
 
+        // Share Modal Functions
+        const SHARE_URL = 'https://robjohncolson.github.io/kanji/';
+
+        function openShareModal() {
+            const modal = document.getElementById('share-modal');
+            document.body.classList.add('modal-open');
+            modal.classList.add('active');
+
+            // Generate QR code
+            const canvas = document.getElementById('qr-canvas');
+            QRCode.toCanvas(canvas, SHARE_URL, {
+                width: 180,
+                margin: 2,
+                color: { dark: '#1a1a1a', light: '#ffffff' }
+            });
+
+            // Show native share button if supported
+            if (navigator.share) {
+                document.getElementById('native-share-container').style.display = 'flex';
+            }
+        }
+
+        function closeShareModal() {
+            document.getElementById('share-modal').classList.remove('active');
+            document.body.classList.remove('modal-open');
+            document.getElementById('copy-feedback').textContent = '';
+        }
+
+        function copyShareUrl() {
+            const input = document.getElementById('share-url-input');
+            navigator.clipboard.writeText(input.value).then(() => {
+                document.getElementById('copy-feedback').textContent = 'Link copied!';
+                setTimeout(() => {
+                    document.getElementById('copy-feedback').textContent = '';
+                }, 2000);
+            });
+        }
+
+        async function nativeShare() {
+            try {
+                await navigator.share({
+                    title: '漢字の道 — Kanji Journey',
+                    text: `I'm learning ${learnedKanji.size} of 1,026 kanji before my Japan trip! Try this practice app:`,
+                    url: SHARE_URL
+                });
+            } catch (err) {
+                if (err.name !== 'AbortError') {
+                    copyShareUrl(); // Fallback to copy
+                }
+            }
+        }
+
         // Close modal on escape
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') closeModal();
+            if (e.key === 'Escape') {
+                closeModal();
+                closeShareModal();
+            }
         });
 
         // Close modal on overlay click
         document.getElementById('practice-modal').addEventListener('click', (e) => {
             if (e.target.id === 'practice-modal') closeModal();
+        });
+
+        document.getElementById('share-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'share-modal') closeShareModal();
         });
 
         init();
