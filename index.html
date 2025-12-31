@@ -1861,33 +1861,39 @@
                 leniency: isMobile ? 1.5 : 1.2, // More forgiving on mobile
                 showHintAfterMisses: isMobile ? 2 : 3, // Faster hints on mobile
                 charDataLoader: function(char, onComplete, onErr) {
-                    // Try Japanese data first (@jamsch package), fallback to Chinese
-                    fetch(`https://cdn.jsdelivr.net/npm/@jamsch/hanzi-writer-data-jp@2.0.2/${char}.json`)
-                        .then(res => {
-                            if (!res.ok) throw new Error('JP data not found');
-                            return res.json();
-                        })
-                        .then(data => {
-                            strokeDataLoaded = true;
-                            onComplete(data);
-                        })
-                        .catch(() => {
-                            // Fallback to default Chinese data
-                            fetch(`https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0/${char}.json`)
-                                .then(res => {
-                                    if (!res.ok) throw new Error('Data not found');
-                                    return res.json();
-                                })
-                                .then(data => {
-                                    strokeDataLoaded = true;
-                                    onComplete(data);
-                                })
-                                .catch(err => {
-                                    strokeDataLoaded = false;
-                                    showDataUnavailable();
-                                    if (onErr) onErr(err);
-                                });
-                        });
+                    // Try multiple data sources for maximum kanji coverage
+                    // 1. hanzi-writer-data-ja (AnimCJK based, best for Japanese)
+                    // 2. @jamsch/hanzi-writer-data-jp
+                    // 3. Default hanzi-writer-data (Chinese)
+                    const sources = [
+                        `https://raw.githubusercontent.com/mnako/hanzi-writer-data-ja/master/data/${char}.json`,
+                        `https://cdn.jsdelivr.net/npm/@jamsch/hanzi-writer-data-jp@2.0.2/${char}.json`,
+                        `https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0/${char}.json`
+                    ];
+
+                    function trySource(index) {
+                        if (index >= sources.length) {
+                            strokeDataLoaded = false;
+                            showDataUnavailable();
+                            if (onErr) onErr(new Error('No stroke data found'));
+                            return;
+                        }
+
+                        fetch(sources[index])
+                            .then(res => {
+                                if (!res.ok) throw new Error('Data not found');
+                                return res.json();
+                            })
+                            .then(data => {
+                                strokeDataLoaded = true;
+                                onComplete(data);
+                            })
+                            .catch(() => {
+                                trySource(index + 1);
+                            });
+                    }
+
+                    trySource(0);
                 }
             });
 
