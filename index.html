@@ -384,6 +384,101 @@
             color: var(--gold);
         }
 
+        /* Kana Quiz Modal */
+        .kana-quiz-content {
+            text-align: center;
+            max-width: 350px;
+        }
+
+        .kana-quiz-char {
+            font-family: 'Noto Serif JP', serif;
+            font-size: 5rem;
+            color: var(--ink);
+            margin: 1rem 0;
+            line-height: 1;
+        }
+
+        .kana-quiz-prompt {
+            font-size: 0.95rem;
+            color: var(--stone);
+            margin-bottom: 1.5rem;
+        }
+
+        .kana-quiz-choices {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .kana-choice-btn {
+            padding: 1rem 0.5rem;
+            font-size: 1.3rem;
+            font-family: 'Noto Sans JP', sans-serif;
+            background: var(--paper);
+            border: 2px solid var(--mist);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .kana-choice-btn:hover:not(:disabled) {
+            border-color: var(--vermillion);
+            background: rgba(215, 59, 62, 0.05);
+        }
+
+        .kana-choice-btn:disabled {
+            cursor: default;
+        }
+
+        .kana-choice-btn.correct {
+            border-color: var(--gold);
+            background: var(--gold-light);
+            color: #8a7000;
+        }
+
+        .kana-choice-btn.incorrect {
+            border-color: var(--vermillion);
+            background: rgba(215, 59, 62, 0.1);
+            color: var(--vermillion);
+        }
+
+        .kana-quiz-feedback {
+            min-height: 4rem;
+            padding: 1rem;
+            border-radius: 8px;
+            font-size: 0.9rem;
+        }
+
+        .kana-quiz-feedback.correct {
+            background: var(--gold-light);
+            color: #8a7000;
+        }
+
+        .kana-quiz-feedback.incorrect {
+            background: rgba(215, 59, 62, 0.1);
+            color: var(--vermillion);
+        }
+
+        .kana-quiz-feedback .romaji-reveal {
+            font-size: 1.5rem;
+            font-weight: bold;
+            display: block;
+            margin: 0.5rem 0;
+        }
+
+        .kana-quiz-feedback .description {
+            font-size: 0.8rem;
+            opacity: 0.9;
+        }
+
+        .kana-quiz-feedback .try-again {
+            font-size: 0.75rem;
+            font-style: italic;
+            display: block;
+            margin-top: 0.5rem;
+        }
+
         /* History */
         .history-section {
             background: var(--washi);
@@ -842,6 +937,14 @@
             .kana-char { font-size: 1.3rem; }
             .kana-char .romaji { font-size: 0.5rem; }
 
+            /* Kana quiz on mobile */
+            .kana-quiz-char { font-size: 4rem; }
+            .kana-choice-btn {
+                padding: 1.2rem 0.5rem;
+                font-size: 1.4rem;
+                min-height: 60px;
+            }
+
             .stats-row { gap: 0.5rem; }
             .stat-card { padding: 0.75rem; }
             .stat-value { font-size: 1.5rem; }
@@ -1012,6 +1115,17 @@
                 <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
             </div>
             <div class="modal-status" id="modal-status"></div>
+        </div>
+    </div>
+
+    <!-- Kana Quiz Modal -->
+    <div class="modal-overlay" id="kana-quiz-modal">
+        <div class="modal-content kana-quiz-content">
+            <button class="close-modal" onclick="closeKanaQuizModal()">&times;</button>
+            <div class="kana-quiz-char" id="kana-quiz-char"></div>
+            <div class="kana-quiz-prompt" id="kana-quiz-prompt">What is the romaji?</div>
+            <div class="kana-quiz-choices" id="kana-quiz-choices"></div>
+            <div class="kana-quiz-feedback" id="kana-quiz-feedback"></div>
         </div>
     </div>
 
@@ -3686,97 +3800,92 @@
         function openKanaPracticeModal(char, type) {
             currentPracticeChar = char;
             currentKanaType = type;
-            strokeDataLoaded = false;
 
-            const modal = document.getElementById('practice-modal');
-            const target = document.getElementById('writer-target');
-            const charDisplay = document.getElementById('practice-char');
-            const meaningEl = document.getElementById('practice-meaning');
-            const fallbackBtn = document.getElementById('fallback-btn');
-            const actionBar = document.querySelector('#practice-modal .modal-actions');
+            const modal = document.getElementById('kana-quiz-modal');
+            const charDisplay = document.getElementById('kana-quiz-char');
+            const prompt = document.getElementById('kana-quiz-prompt');
+            const choicesContainer = document.getElementById('kana-quiz-choices');
+            const feedback = document.getElementById('kana-quiz-feedback');
 
-            // Get kana info
-            const romaji = KANA_READINGS[char] || '';
+            const correctRomaji = KANA_READINGS[char] || '';
             const info = KANA_INFO[char] || { row: '', description: '' };
             const typeName = type === 'hiragana' ? 'Hiragana' : 'Katakana';
 
+            // Set up the quiz
             charDisplay.textContent = char;
-            meaningEl.innerHTML = `
-                <strong>${romaji}</strong> (${typeName})<br>
-                <span style="font-size: 0.85rem; color: var(--stone);">${info.row} - ${info.description}</span>
-            `;
+            prompt.textContent = `What is the romaji for this ${typeName.toLowerCase()}?`;
+            feedback.innerHTML = '';
+            feedback.className = 'kana-quiz-feedback';
 
-            // Clear and setup writer
-            target.innerHTML = '';
+            // Get 3 wrong answers from the same kana type
+            const allReadings = Object.entries(KANA_READINGS)
+                .filter(([k, v]) => {
+                    const isHiragana = HIRAGANA_CHARS.includes(k);
+                    return (type === 'hiragana' ? isHiragana : !isHiragana) && v !== correctRomaji;
+                })
+                .map(([k, v]) => v);
+
+            // Remove duplicates and shuffle
+            const uniqueWrong = [...new Set(allReadings)].sort(() => Math.random() - 0.5).slice(0, 3);
+
+            // Combine and shuffle all choices
+            const choices = [correctRomaji, ...uniqueWrong].sort(() => Math.random() - 0.5);
+
+            // Render choices
+            choicesContainer.innerHTML = choices.map(choice => `
+                <button class="kana-choice-btn" data-romaji="${choice}">${choice}</button>
+            `).join('');
+
+            // Add click handlers
+            choicesContainer.querySelectorAll('.kana-choice-btn').forEach(btn => {
+                btn.onclick = () => handleKanaQuizAnswer(btn, char, type, correctRomaji, info);
+            });
+
+            // Show modal
             document.body.classList.add('modal-open');
             modal.classList.add('active');
+        }
 
-            // Hide fallback initially
-            fallbackBtn.style.display = 'none';
+        function handleKanaQuizAnswer(btn, char, type, correctRomaji, info) {
+            const choicesContainer = document.getElementById('kana-quiz-choices');
+            const feedback = document.getElementById('kana-quiz-feedback');
+            const selectedRomaji = btn.dataset.romaji;
+            const isCorrect = selectedRomaji === correctRomaji;
 
-            // Setup HanziWriter for kana
-            try {
-                writer = HanziWriter.create(target, char, {
-                    width: 200,
-                    height: 200,
-                    padding: 5,
-                    showOutline: true,
-                    showCharacter: false,
-                    strokeAnimationSpeed: 1,
-                    delayBetweenStrokes: 100,
-                    strokeColor: '#1a1a1a',
-                    outlineColor: '#e8e4dc',
-                    drawingColor: '#d73b3e',
-                    showHintAfterMisses: window.innerWidth < 600 ? 2 : 3,
-                    highlightOnComplete: true,
-                    highlightColor: '#c9a227',
-                    charDataLoader: function(char, onComplete, onError) {
-                        // Use kana-svg-data package for kana stroke data
-                        const isHiragana = HIRAGANA_CHARS.includes(char);
-                        const folder = isHiragana ? 'hiragana' : 'katakana';
-                        const url = `https://cdn.jsdelivr.net/npm/kana-svg-data/dist/${folder}/${encodeURIComponent(char)}.json`;
+            // Disable all buttons
+            choicesContainer.querySelectorAll('.kana-choice-btn').forEach(b => {
+                b.disabled = true;
+                if (b.dataset.romaji === correctRomaji) {
+                    b.classList.add('correct');
+                } else if (b === btn && !isCorrect) {
+                    b.classList.add('incorrect');
+                }
+            });
 
-                        fetch(url)
-                            .then(res => {
-                                if (!res.ok) throw new Error('Not found');
-                                return res.json();
-                            })
-                            .then(data => {
-                                // Transform kana-svg-data format to HanziWriter format
-                                const transformedData = {
-                                    strokes: data.strokes.map(s => s.value),
-                                    medians: data.medians.map(m => m.value)
-                                };
-                                strokeDataLoaded = true;
-                                onComplete(transformedData);
-                            })
-                            .catch(err => {
-                                console.log('No stroke data for kana:', char, err);
-                                fallbackBtn.style.display = 'inline-block';
-                                fallbackBtn.textContent = 'Mark as Learned (no stroke data)';
-                                if (onError) onError(err);
-                            });
-                    }
-                });
-
-                writer.quiz({
-                    onComplete: function(data) {
-                        markKanaAsLearned(char, type, 'practice');
-                        setTimeout(() => closePracticeModal(), 800);
-                    },
-                    leniency: window.innerWidth < 600 ? 1.5 : 1.2
-                });
-            } catch (e) {
-                console.error('Error creating writer for kana:', e);
-                fallbackBtn.style.display = 'inline-block';
-                fallbackBtn.textContent = 'Mark as Learned';
+            if (isCorrect) {
+                feedback.className = 'kana-quiz-feedback correct';
+                feedback.innerHTML = `
+                    <strong>Correct!</strong><br>
+                    <span class="romaji-reveal">${correctRomaji}</span><br>
+                    <span class="description">${info.row} - ${info.description}</span>
+                `;
+                markKanaAsLearned(char, type, 'quiz');
+                setTimeout(() => closeKanaQuizModal(), 1500);
+            } else {
+                feedback.className = 'kana-quiz-feedback incorrect';
+                feedback.innerHTML = `
+                    <strong>Not quite!</strong> The answer is <strong>${correctRomaji}</strong><br>
+                    <span class="description">${info.row} - ${info.description}</span><br>
+                    <span class="try-again">Try again later to mark as learned.</span>
+                `;
+                setTimeout(() => closeKanaQuizModal(), 2500);
             }
+        }
 
-            // Update fallback button for kana
-            fallbackBtn.onclick = function() {
-                markKanaAsLearned(char, type, 'fallback');
-                closePracticeModal();
-            };
+        function closeKanaQuizModal() {
+            const modal = document.getElementById('kana-quiz-modal');
+            modal.classList.remove('active');
+            document.body.classList.remove('modal-open');
         }
 
         function markKanaAsLearned(char, type, method) {
