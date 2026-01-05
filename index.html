@@ -299,6 +299,91 @@
             color: var(--gold);
         }
 
+        /* Kana Characters */
+        .kana-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(54px, 1fr));
+            gap: 6px;
+        }
+
+        .kana-char {
+            aspect-ratio: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.4rem;
+            background: var(--paper);
+            border: 1px solid var(--mist);
+            cursor: pointer;
+            transition: all 0.15s ease;
+            position: relative;
+            padding: 4px;
+        }
+
+        .kana-char .romaji {
+            font-size: 0.55rem;
+            color: var(--stone);
+            margin-top: 2px;
+            font-family: 'Noto Sans JP', sans-serif;
+            letter-spacing: 0;
+        }
+
+        .kana-char:hover {
+            border-color: var(--vermillion);
+            transform: scale(1.1);
+            z-index: 1;
+        }
+
+        .kana-char.learned {
+            background: var(--gold-light);
+            border-color: var(--gold);
+        }
+
+        .kana-char.learned .char {
+            color: #8a7000;
+        }
+
+        .kana-char.learned::after {
+            content: '✓';
+            position: absolute;
+            bottom: 2px;
+            right: 2px;
+            font-size: 0.5rem;
+            color: var(--gold);
+        }
+
+        /* Kana Stats */
+        .kana-stats {
+            margin-bottom: 0.5rem;
+        }
+
+        .kana-stats .stat-card {
+            flex: 0 1 auto;
+            min-width: 100px;
+        }
+
+        .stat-total {
+            font-size: 0.7rem;
+            color: var(--stone);
+            margin-top: 0.1rem;
+        }
+
+        /* Kana Section Styling */
+        .kana-section {
+            background: var(--washi);
+            border: 1px solid var(--mist);
+            margin-bottom: 0.5rem;
+        }
+
+        .kana-section .grade-header {
+            background: linear-gradient(90deg, rgba(201, 162, 39, 0.1), transparent);
+        }
+
+        .kana-section .grade-title {
+            color: var(--gold);
+        }
+
         /* History */
         .history-section {
             background: var(--washi);
@@ -749,6 +834,14 @@
             }
             .kanji-char { font-size: 1.4rem; }
 
+            /* Kana tiles for touch */
+            .kana-grid {
+                grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+                gap: 5px;
+            }
+            .kana-char { font-size: 1.3rem; }
+            .kana-char .romaji { font-size: 0.5rem; }
+
             .stats-row { gap: 0.5rem; }
             .stat-card { padding: 0.75rem; }
             .stat-value { font-size: 1.5rem; }
@@ -832,10 +925,25 @@
             </button>
         </header>
 
+        <!-- Kana Stats Row -->
+        <div class="stats-row kana-stats">
+            <div class="stat-card">
+                <div class="stat-value gold" id="hiragana-count">0</div>
+                <div class="stat-label">Hiragana</div>
+                <div class="stat-total">/ 46</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value gold" id="katakana-count">0</div>
+                <div class="stat-label">Katakana</div>
+                <div class="stat-total">/ 46</div>
+            </div>
+        </div>
+
+        <!-- Kanji Stats Row -->
         <div class="stats-row">
             <div class="stat-card">
                 <div class="stat-value gold" id="learned-count">0</div>
-                <div class="stat-label">Learned</div>
+                <div class="stat-label">Kanji Learned</div>
             </div>
             <div class="stat-card">
                 <div class="stat-value highlight" id="remaining-count">1026</div>
@@ -867,6 +975,8 @@
                 復習 <span class="count" id="review-count">0</span>
             </button>
         </div>
+
+        <div id="kana-sections"></div>
 
         <div id="grade-sections"></div>
 
@@ -974,14 +1084,158 @@
             6: "六年生"
         };
 
+        // Hiragana and Katakana Data
+        const HIRAGANA_CHARS = "あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん";
+        const KATAKANA_CHARS = "アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン";
+        const TOTAL_HIRAGANA = 46;
+        const TOTAL_KATAKANA = 46;
+
+        // Kana to Romaji mapping (all explanations in English and romaji)
+        const KANA_READINGS = {
+            // Hiragana
+            "あ": "a", "い": "i", "う": "u", "え": "e", "お": "o",
+            "か": "ka", "き": "ki", "く": "ku", "け": "ke", "こ": "ko",
+            "さ": "sa", "し": "shi", "す": "su", "せ": "se", "そ": "so",
+            "た": "ta", "ち": "chi", "つ": "tsu", "て": "te", "と": "to",
+            "な": "na", "に": "ni", "ぬ": "nu", "ね": "ne", "の": "no",
+            "は": "ha", "ひ": "hi", "ふ": "fu", "へ": "he", "ほ": "ho",
+            "ま": "ma", "み": "mi", "む": "mu", "め": "me", "も": "mo",
+            "や": "ya", "ゆ": "yu", "よ": "yo",
+            "ら": "ra", "り": "ri", "る": "ru", "れ": "re", "ろ": "ro",
+            "わ": "wa", "を": "wo", "ん": "n",
+            // Katakana
+            "ア": "a", "イ": "i", "ウ": "u", "エ": "e", "オ": "o",
+            "カ": "ka", "キ": "ki", "ク": "ku", "ケ": "ke", "コ": "ko",
+            "サ": "sa", "シ": "shi", "ス": "su", "セ": "se", "ソ": "so",
+            "タ": "ta", "チ": "chi", "ツ": "tsu", "テ": "te", "ト": "to",
+            "ナ": "na", "ニ": "ni", "ヌ": "nu", "ネ": "ne", "ノ": "no",
+            "ハ": "ha", "ヒ": "hi", "フ": "fu", "ヘ": "he", "ホ": "ho",
+            "マ": "ma", "ミ": "mi", "ム": "mu", "メ": "me", "モ": "mo",
+            "ヤ": "ya", "ユ": "yu", "ヨ": "yo",
+            "ラ": "ra", "リ": "ri", "ル": "ru", "レ": "re", "ロ": "ro",
+            "ワ": "wa", "ヲ": "wo", "ン": "n"
+        };
+
+        // Kana descriptions (English explanations)
+        const KANA_INFO = {
+            // Vowels
+            "あ": { row: "Vowel", description: "The 'a' sound, like 'ah' in 'father'" },
+            "い": { row: "Vowel", description: "The 'i' sound, like 'ee' in 'see'" },
+            "う": { row: "Vowel", description: "The 'u' sound, like 'oo' in 'food'" },
+            "え": { row: "Vowel", description: "The 'e' sound, like 'e' in 'met'" },
+            "お": { row: "Vowel", description: "The 'o' sound, like 'o' in 'go'" },
+            // K-row
+            "か": { row: "K-row", description: "Ka - 'k' + 'a' sound" },
+            "き": { row: "K-row", description: "Ki - 'k' + 'i' sound" },
+            "く": { row: "K-row", description: "Ku - 'k' + 'u' sound" },
+            "け": { row: "K-row", description: "Ke - 'k' + 'e' sound" },
+            "こ": { row: "K-row", description: "Ko - 'k' + 'o' sound" },
+            // S-row
+            "さ": { row: "S-row", description: "Sa - 's' + 'a' sound" },
+            "し": { row: "S-row", description: "Shi - 'sh' + 'i' sound (not 'si')" },
+            "す": { row: "S-row", description: "Su - 's' + 'u' sound" },
+            "せ": { row: "S-row", description: "Se - 's' + 'e' sound" },
+            "そ": { row: "S-row", description: "So - 's' + 'o' sound" },
+            // T-row
+            "た": { row: "T-row", description: "Ta - 't' + 'a' sound" },
+            "ち": { row: "T-row", description: "Chi - 'ch' + 'i' sound (not 'ti')" },
+            "つ": { row: "T-row", description: "Tsu - 'ts' + 'u' sound (not 'tu')" },
+            "て": { row: "T-row", description: "Te - 't' + 'e' sound" },
+            "と": { row: "T-row", description: "To - 't' + 'o' sound" },
+            // N-row
+            "な": { row: "N-row", description: "Na - 'n' + 'a' sound" },
+            "に": { row: "N-row", description: "Ni - 'n' + 'i' sound" },
+            "ぬ": { row: "N-row", description: "Nu - 'n' + 'u' sound" },
+            "ね": { row: "N-row", description: "Ne - 'n' + 'e' sound" },
+            "の": { row: "N-row", description: "No - 'n' + 'o' sound" },
+            // H-row
+            "は": { row: "H-row", description: "Ha - 'h' + 'a' sound" },
+            "ひ": { row: "H-row", description: "Hi - 'h' + 'i' sound" },
+            "ふ": { row: "H-row", description: "Fu - between 'f' and 'h' + 'u'" },
+            "へ": { row: "H-row", description: "He - 'h' + 'e' sound" },
+            "ほ": { row: "H-row", description: "Ho - 'h' + 'o' sound" },
+            // M-row
+            "ま": { row: "M-row", description: "Ma - 'm' + 'a' sound" },
+            "み": { row: "M-row", description: "Mi - 'm' + 'i' sound" },
+            "む": { row: "M-row", description: "Mu - 'm' + 'u' sound" },
+            "め": { row: "M-row", description: "Me - 'm' + 'e' sound" },
+            "も": { row: "M-row", description: "Mo - 'm' + 'o' sound" },
+            // Y-row
+            "や": { row: "Y-row", description: "Ya - 'y' + 'a' sound" },
+            "ゆ": { row: "Y-row", description: "Yu - 'y' + 'u' sound" },
+            "よ": { row: "Y-row", description: "Yo - 'y' + 'o' sound" },
+            // R-row
+            "ら": { row: "R-row", description: "Ra - between 'r' and 'l' + 'a'" },
+            "り": { row: "R-row", description: "Ri - between 'r' and 'l' + 'i'" },
+            "る": { row: "R-row", description: "Ru - between 'r' and 'l' + 'u'" },
+            "れ": { row: "R-row", description: "Re - between 'r' and 'l' + 'e'" },
+            "ろ": { row: "R-row", description: "Ro - between 'r' and 'l' + 'o'" },
+            // W-row
+            "わ": { row: "W-row", description: "Wa - 'w' + 'a' sound" },
+            "を": { row: "W-row", description: "Wo - particle 'o' (object marker)" },
+            // N
+            "ん": { row: "N", description: "N - standalone nasal 'n' sound" },
+            // Katakana (same descriptions, used for foreign words)
+            "ア": { row: "Vowel", description: "The 'a' sound, like 'ah' in 'father'" },
+            "イ": { row: "Vowel", description: "The 'i' sound, like 'ee' in 'see'" },
+            "ウ": { row: "Vowel", description: "The 'u' sound, like 'oo' in 'food'" },
+            "エ": { row: "Vowel", description: "The 'e' sound, like 'e' in 'met'" },
+            "オ": { row: "Vowel", description: "The 'o' sound, like 'o' in 'go'" },
+            "カ": { row: "K-row", description: "Ka - 'k' + 'a' sound" },
+            "キ": { row: "K-row", description: "Ki - 'k' + 'i' sound" },
+            "ク": { row: "K-row", description: "Ku - 'k' + 'u' sound" },
+            "ケ": { row: "K-row", description: "Ke - 'k' + 'e' sound" },
+            "コ": { row: "K-row", description: "Ko - 'k' + 'o' sound" },
+            "サ": { row: "S-row", description: "Sa - 's' + 'a' sound" },
+            "シ": { row: "S-row", description: "Shi - 'sh' + 'i' sound (not 'si')" },
+            "ス": { row: "S-row", description: "Su - 's' + 'u' sound" },
+            "セ": { row: "S-row", description: "Se - 's' + 'e' sound" },
+            "ソ": { row: "S-row", description: "So - 's' + 'o' sound" },
+            "タ": { row: "T-row", description: "Ta - 't' + 'a' sound" },
+            "チ": { row: "T-row", description: "Chi - 'ch' + 'i' sound (not 'ti')" },
+            "ツ": { row: "T-row", description: "Tsu - 'ts' + 'u' sound (not 'tu')" },
+            "テ": { row: "T-row", description: "Te - 't' + 'e' sound" },
+            "ト": { row: "T-row", description: "To - 't' + 'o' sound" },
+            "ナ": { row: "N-row", description: "Na - 'n' + 'a' sound" },
+            "ニ": { row: "N-row", description: "Ni - 'n' + 'i' sound" },
+            "ヌ": { row: "N-row", description: "Nu - 'n' + 'u' sound" },
+            "ネ": { row: "N-row", description: "Ne - 'n' + 'e' sound" },
+            "ノ": { row: "N-row", description: "No - 'n' + 'o' sound" },
+            "ハ": { row: "H-row", description: "Ha - 'h' + 'a' sound" },
+            "ヒ": { row: "H-row", description: "Hi - 'h' + 'i' sound" },
+            "フ": { row: "H-row", description: "Fu - between 'f' and 'h' + 'u'" },
+            "ヘ": { row: "H-row", description: "He - 'h' + 'e' sound" },
+            "ホ": { row: "H-row", description: "Ho - 'h' + 'o' sound" },
+            "マ": { row: "M-row", description: "Ma - 'm' + 'a' sound" },
+            "ミ": { row: "M-row", description: "Mi - 'm' + 'i' sound" },
+            "ム": { row: "M-row", description: "Mu - 'm' + 'u' sound" },
+            "メ": { row: "M-row", description: "Me - 'm' + 'e' sound" },
+            "モ": { row: "M-row", description: "Mo - 'm' + 'o' sound" },
+            "ヤ": { row: "Y-row", description: "Ya - 'y' + 'a' sound" },
+            "ユ": { row: "Y-row", description: "Yu - 'y' + 'u' sound" },
+            "ヨ": { row: "Y-row", description: "Yo - 'y' + 'o' sound" },
+            "ラ": { row: "R-row", description: "Ra - between 'r' and 'l' + 'a'" },
+            "リ": { row: "R-row", description: "Ri - between 'r' and 'l' + 'i'" },
+            "ル": { row: "R-row", description: "Ru - between 'r' and 'l' + 'u'" },
+            "レ": { row: "R-row", description: "Re - between 'r' and 'l' + 'e'" },
+            "ロ": { row: "R-row", description: "Ro - between 'r' and 'l' + 'o'" },
+            "ワ": { row: "W-row", description: "Wa - 'w' + 'a' sound" },
+            "ヲ": { row: "W-row", description: "Wo - particle 'o' (object marker)" },
+            "ン": { row: "N", description: "N - standalone nasal 'n' sound" }
+        };
+
         const TARGET_DATE = new Date('2026-07-27');
         const TOTAL_KANJI = 1026;
 
         // State
         let learnedKanji = new Set(JSON.parse(localStorage.getItem('learnedKanji') || '[]'));
+        let learnedHiragana = new Set(JSON.parse(localStorage.getItem('learnedHiragana') || '[]'));
+        let learnedKatakana = new Set(JSON.parse(localStorage.getItem('learnedKatakana') || '[]'));
         let history = JSON.parse(localStorage.getItem('kanjiHistory') || '[]');
         let expandedGrades = new Set([1]);
+        let expandedKana = new Set(); // Track which kana sections are expanded
         let writer = null;
+        let currentKanaType = null; // 'hiragana' or 'katakana' for practice modal
         let currentPracticeChar = null;
         let strokeDataLoaded = false;
 
@@ -3268,6 +3522,7 @@
 
         function init() {
             checkStreak();
+            renderKanaSections();
             renderGradeSections();
             updateStats();
             renderHistory();
@@ -3322,6 +3577,225 @@
 
         function saveStreak() {
             localStorage.setItem('streakData', JSON.stringify(streakData));
+        }
+
+        // ============================================
+        // KANA SECTIONS (Hiragana & Katakana)
+        // ============================================
+
+        function renderKanaSections() {
+            const container = document.getElementById('kana-sections');
+            container.innerHTML = '';
+
+            // Hiragana Section
+            const hiraganaLearned = learnedHiragana.size;
+            const hiraganaExpanded = expandedKana.has('hiragana');
+
+            const hiraganaSection = document.createElement('div');
+            hiraganaSection.className = `grade-section kana-section ${hiraganaExpanded ? 'expanded' : ''}`;
+            hiraganaSection.innerHTML = `
+                <div class="grade-header" onclick="toggleKana('hiragana')">
+                    <span class="grade-title">
+                        Hiragana
+                        <span class="grade-progress">
+                            <span class="learned-count">${hiraganaLearned}</span> / ${TOTAL_HIRAGANA}
+                        </span>
+                    </span>
+                    <span class="grade-arrow">▼</span>
+                </div>
+                <div class="grade-content">
+                    <div class="kana-grid" id="grid-hiragana"></div>
+                </div>
+            `;
+            container.appendChild(hiraganaSection);
+
+            if (hiraganaExpanded) {
+                renderKanaGrid('hiragana');
+            }
+
+            // Katakana Section
+            const katakanaLearned = learnedKatakana.size;
+            const katakanaExpanded = expandedKana.has('katakana');
+
+            const katakanaSection = document.createElement('div');
+            katakanaSection.className = `grade-section kana-section ${katakanaExpanded ? 'expanded' : ''}`;
+            katakanaSection.innerHTML = `
+                <div class="grade-header" onclick="toggleKana('katakana')">
+                    <span class="grade-title">
+                        Katakana
+                        <span class="grade-progress">
+                            <span class="learned-count">${katakanaLearned}</span> / ${TOTAL_KATAKANA}
+                        </span>
+                    </span>
+                    <span class="grade-arrow">▼</span>
+                </div>
+                <div class="grade-content">
+                    <div class="kana-grid" id="grid-katakana"></div>
+                </div>
+            `;
+            container.appendChild(katakanaSection);
+
+            if (katakanaExpanded) {
+                renderKanaGrid('katakana');
+            }
+        }
+
+        function toggleKana(type) {
+            if (expandedKana.has(type)) {
+                expandedKana.delete(type);
+            } else {
+                expandedKana.add(type);
+            }
+            renderKanaSections();
+        }
+
+        function renderKanaGrid(type) {
+            const container = document.getElementById(`grid-${type}`);
+            if (!container) return;
+
+            const chars = type === 'hiragana' ? HIRAGANA_CHARS : KATAKANA_CHARS;
+            const learnedSet = type === 'hiragana' ? learnedHiragana : learnedKatakana;
+            container.innerHTML = '';
+
+            for (const char of chars) {
+                const div = document.createElement('div');
+                div.className = 'kana-char';
+
+                const romaji = KANA_READINGS[char] || '';
+
+                div.innerHTML = `
+                    <span class="char">${char}</span>
+                    <span class="romaji">${romaji}</span>
+                `;
+
+                if (learnedSet.has(char)) {
+                    div.classList.add('learned');
+                }
+
+                div.onclick = () => handleKanaClick(char, type);
+                container.appendChild(div);
+            }
+        }
+
+        function handleKanaClick(char, type) {
+            openKanaPracticeModal(char, type);
+        }
+
+        function openKanaPracticeModal(char, type) {
+            currentPracticeChar = char;
+            currentKanaType = type;
+            strokeDataLoaded = false;
+
+            const modal = document.getElementById('practice-modal');
+            const target = document.getElementById('writer-target');
+            const charDisplay = document.getElementById('practice-char');
+            const meaningEl = document.getElementById('practice-meaning');
+            const fallbackBtn = document.getElementById('fallback-btn');
+            const actionBar = document.querySelector('#practice-modal .modal-actions');
+
+            // Get kana info
+            const romaji = KANA_READINGS[char] || '';
+            const info = KANA_INFO[char] || { row: '', description: '' };
+            const typeName = type === 'hiragana' ? 'Hiragana' : 'Katakana';
+
+            charDisplay.textContent = char;
+            meaningEl.innerHTML = `
+                <strong>${romaji}</strong> (${typeName})<br>
+                <span style="font-size: 0.85rem; color: var(--stone);">${info.row} - ${info.description}</span>
+            `;
+
+            // Clear and setup writer
+            target.innerHTML = '';
+            document.body.classList.add('modal-open');
+            modal.classList.add('active');
+
+            // Hide fallback initially
+            fallbackBtn.style.display = 'none';
+
+            // Setup HanziWriter for kana
+            try {
+                writer = HanziWriter.create(target, char, {
+                    width: 200,
+                    height: 200,
+                    padding: 5,
+                    showOutline: true,
+                    showCharacter: false,
+                    strokeAnimationSpeed: 1,
+                    delayBetweenStrokes: 100,
+                    strokeColor: '#1a1a1a',
+                    outlineColor: '#e8e4dc',
+                    drawingColor: '#d73b3e',
+                    showHintAfterMisses: window.innerWidth < 600 ? 2 : 3,
+                    highlightOnComplete: true,
+                    highlightColor: '#c9a227',
+                    charDataLoader: function(char, onComplete) {
+                        // For kana, we need to use the correct CDN path
+                        const isHiragana = HIRAGANA_CHARS.includes(char);
+                        const folder = isHiragana ? 'hiragana' : 'katakana';
+                        const url = `https://cdn.jsdelivr.net/npm/hanzi-writer-data-jp@2.0/${folder}/${encodeURIComponent(char)}.json`;
+
+                        fetch(url)
+                            .then(res => {
+                                if (!res.ok) throw new Error('Not found');
+                                return res.json();
+                            })
+                            .then(data => {
+                                strokeDataLoaded = true;
+                                onComplete(data);
+                            })
+                            .catch(err => {
+                                console.log('No stroke data for kana:', char);
+                                fallbackBtn.style.display = 'inline-block';
+                                fallbackBtn.textContent = 'Mark as Learned (no stroke data)';
+                            });
+                    }
+                });
+
+                writer.quiz({
+                    onComplete: function(data) {
+                        markKanaAsLearned(char, type, 'practice');
+                        setTimeout(() => closePracticeModal(), 800);
+                    },
+                    leniency: window.innerWidth < 600 ? 1.5 : 1.2
+                });
+            } catch (e) {
+                console.error('Error creating writer for kana:', e);
+                fallbackBtn.style.display = 'inline-block';
+                fallbackBtn.textContent = 'Mark as Learned';
+            }
+
+            // Update fallback button for kana
+            fallbackBtn.onclick = function() {
+                markKanaAsLearned(char, type, 'fallback');
+                closePracticeModal();
+            };
+        }
+
+        function markKanaAsLearned(char, type, method) {
+            const learnedSet = type === 'hiragana' ? learnedHiragana : learnedKatakana;
+
+            if (learnedSet.has(char)) return;
+
+            learnedSet.add(char);
+
+            // Add to history
+            const entry = {
+                id: Date.now(),
+                date: new Date().toISOString(),
+                kanji: char,
+                count: 1,
+                method: method,
+                type: type // 'hiragana' or 'katakana'
+            };
+            history.unshift(entry);
+
+            // Update streak
+            updateStreak();
+
+            save();
+            updateStats();
+            renderKanaSections();
+            renderHistory();
         }
 
         function renderGradeSections() {
@@ -3579,10 +4053,13 @@
 
         function save() {
             localStorage.setItem('learnedKanji', JSON.stringify([...learnedKanji]));
+            localStorage.setItem('learnedHiragana', JSON.stringify([...learnedHiragana]));
+            localStorage.setItem('learnedKatakana', JSON.stringify([...learnedKatakana]));
             localStorage.setItem('kanjiHistory', JSON.stringify(history));
         }
 
         function updateStats() {
+            // Kanji stats
             const learned = learnedKanji.size;
             const remaining = TOTAL_KANJI - learned;
             const today = new Date();
@@ -3597,6 +4074,10 @@
             document.getElementById('per-day').textContent = perDay;
             document.getElementById('progress-fill').style.width = `${percent}%`;
             document.getElementById('streak-count').textContent = streakData.streak;
+
+            // Kana stats
+            document.getElementById('hiragana-count').textContent = learnedHiragana.size;
+            document.getElementById('katakana-count').textContent = learnedKatakana.size;
         }
 
         function renderHistory() {
@@ -3631,6 +4112,8 @@
         function exportData() {
             const data = {
                 learnedKanji: [...learnedKanji],
+                learnedHiragana: [...learnedHiragana],
+                learnedKatakana: [...learnedKatakana],
                 history: history,
                 exportedAt: new Date().toISOString()
             };
