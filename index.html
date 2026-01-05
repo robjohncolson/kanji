@@ -353,6 +353,16 @@
             color: var(--gold);
         }
 
+        .kana-char.in-progress {
+            background: rgba(215, 59, 62, 0.08);
+            border-color: rgba(215, 59, 62, 0.3);
+        }
+
+        .kana-char .romaji.in-progress {
+            color: var(--vermillion);
+            font-weight: 500;
+        }
+
         /* Kana Stats */
         .kana-stats {
             margin-bottom: 0.5rem;
@@ -477,6 +487,12 @@
             font-style: italic;
             display: block;
             margin-top: 0.5rem;
+        }
+
+        .kana-quiz-feedback .progress-hint {
+            font-size: 0.85rem;
+            display: block;
+            margin-top: 0.3rem;
         }
 
         /* History */
@@ -1345,6 +1361,9 @@
         let learnedKanji = new Set(JSON.parse(localStorage.getItem('learnedKanji') || '[]'));
         let learnedHiragana = new Set(JSON.parse(localStorage.getItem('learnedHiragana') || '[]'));
         let learnedKatakana = new Set(JSON.parse(localStorage.getItem('learnedKatakana') || '[]'));
+        // Track progress toward mastery (5 correct answers required)
+        let kanaProgress = JSON.parse(localStorage.getItem('kanaProgress') || '{}');
+        const KANA_MASTERY_REQUIRED = 5;
         let history = JSON.parse(localStorage.getItem('kanjiHistory') || '[]');
         let expandedGrades = new Set([1]);
         let expandedKana = new Set(); // Track which kana sections are expanded
@@ -3776,16 +3795,26 @@
                 div.className = 'kana-char';
 
                 const isLearned = learnedSet.has(char);
+                const progress = kanaProgress[char] || 0;
                 const romaji = KANA_READINGS[char] || '';
 
-                // Only show romaji after character is learned (earned, not given away!)
+                // Show progress if in progress, romaji if learned, ? if not started
+                let romajiDisplay = '?';
+                if (isLearned) {
+                    romajiDisplay = romaji;
+                } else if (progress > 0) {
+                    romajiDisplay = `${progress}/${KANA_MASTERY_REQUIRED}`;
+                }
+
                 div.innerHTML = `
                     <span class="char">${char}</span>
-                    <span class="romaji">${isLearned ? romaji : '?'}</span>
+                    <span class="romaji ${progress > 0 && !isLearned ? 'in-progress' : ''}">${romajiDisplay}</span>
                 `;
 
                 if (isLearned) {
                     div.classList.add('learned');
+                } else if (progress > 0) {
+                    div.classList.add('in-progress');
                 }
 
                 div.onclick = () => handleKanaClick(char, type);
@@ -3810,10 +3839,17 @@
             const correctRomaji = KANA_READINGS[char] || '';
             const info = KANA_INFO[char] || { row: '', description: '' };
             const typeName = type === 'hiragana' ? 'Hiragana' : 'Katakana';
+            const learnedSet = type === 'hiragana' ? learnedHiragana : learnedKatakana;
+            const currentProgress = kanaProgress[char] || 0;
+            const isAlreadyMastered = learnedSet.has(char);
 
             // Set up the quiz
             charDisplay.textContent = char;
-            prompt.textContent = `What is the romaji for this ${typeName.toLowerCase()}?`;
+            if (isAlreadyMastered) {
+                prompt.textContent = `Practice: What is the romaji?`;
+            } else {
+                prompt.innerHTML = `What is the romaji? <span style="color: var(--vermillion);">(${currentProgress}/${KANA_MASTERY_REQUIRED})</span>`;
+            }
             feedback.innerHTML = '';
             feedback.className = 'kana-quiz-feedback';
 
@@ -3851,6 +3887,7 @@
             const feedback = document.getElementById('kana-quiz-feedback');
             const selectedRomaji = btn.dataset.romaji;
             const isCorrect = selectedRomaji === correctRomaji;
+            const learnedSet = type === 'hiragana' ? learnedHiragana : learnedKatakana;
 
             // Disable all buttons
             choicesContainer.querySelectorAll('.kana-choice-btn').forEach(b => {
@@ -3863,20 +3900,46 @@
             });
 
             if (isCorrect) {
-                feedback.className = 'kana-quiz-feedback correct';
-                feedback.innerHTML = `
-                    <strong>Correct!</strong><br>
-                    <span class="romaji-reveal">${correctRomaji}</span><br>
-                    <span class="description">${info.row} - ${info.description}</span>
-                `;
-                markKanaAsLearned(char, type, 'quiz');
+                // Increment progress
+                kanaProgress[char] = (kanaProgress[char] || 0) + 1;
+                const newProgress = kanaProgress[char];
+                const isMastered = newProgress >= KANA_MASTERY_REQUIRED;
+
+                if (isMastered && !learnedSet.has(char)) {
+                    // Mastered! Mark as learned
+                    feedback.className = 'kana-quiz-feedback correct';
+                    feedback.innerHTML = `
+                        <strong>Mastered!</strong> ${KANA_MASTERY_REQUIRED}/${KANA_MASTERY_REQUIRED}<br>
+                        <span class="romaji-reveal">${correctRomaji}</span><br>
+                        <span class="description">${info.row} - ${info.description}</span>
+                    `;
+                    markKanaAsLearned(char, type, 'quiz');
+                } else if (isMastered) {
+                    // Already mastered, just practicing
+                    feedback.className = 'kana-quiz-feedback correct';
+                    feedback.innerHTML = `
+                        <strong>Correct!</strong><br>
+                        <span class="romaji-reveal">${correctRomaji}</span><br>
+                        <span class="description">${info.row} - ${info.description}</span>
+                    `;
+                    save();
+                } else {
+                    // Progress but not mastered yet
+                    feedback.className = 'kana-quiz-feedback correct';
+                    feedback.innerHTML = `
+                        <strong>Correct!</strong> ${newProgress}/${KANA_MASTERY_REQUIRED}<br>
+                        <span class="progress-hint">${KANA_MASTERY_REQUIRED - newProgress} more to master this character</span>
+                    `;
+                    save();
+                    renderKanaSections();
+                }
                 setTimeout(() => closeKanaQuizModal(), 1500);
             } else {
                 feedback.className = 'kana-quiz-feedback incorrect';
                 feedback.innerHTML = `
                     <strong>Not quite!</strong> The answer is <strong>${correctRomaji}</strong><br>
                     <span class="description">${info.row} - ${info.description}</span><br>
-                    <span class="try-again">Try again later to mark as learned.</span>
+                    <span class="try-again">Try again to build your streak.</span>
                 `;
                 setTimeout(() => closeKanaQuizModal(), 2500);
             }
@@ -4172,6 +4235,7 @@
             localStorage.setItem('learnedKanji', JSON.stringify([...learnedKanji]));
             localStorage.setItem('learnedHiragana', JSON.stringify([...learnedHiragana]));
             localStorage.setItem('learnedKatakana', JSON.stringify([...learnedKatakana]));
+            localStorage.setItem('kanaProgress', JSON.stringify(kanaProgress));
             localStorage.setItem('kanjiHistory', JSON.stringify(history));
         }
 
@@ -4231,6 +4295,7 @@
                 learnedKanji: [...learnedKanji],
                 learnedHiragana: [...learnedHiragana],
                 learnedKatakana: [...learnedKatakana],
+                kanaProgress: kanaProgress,
                 history: history,
                 exportedAt: new Date().toISOString()
             };
