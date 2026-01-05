@@ -3661,14 +3661,16 @@
                 const div = document.createElement('div');
                 div.className = 'kana-char';
 
+                const isLearned = learnedSet.has(char);
                 const romaji = KANA_READINGS[char] || '';
 
+                // Only show romaji after character is learned (earned, not given away!)
                 div.innerHTML = `
                     <span class="char">${char}</span>
-                    <span class="romaji">${romaji}</span>
+                    <span class="romaji">${isLearned ? romaji : '?'}</span>
                 `;
 
-                if (learnedSet.has(char)) {
+                if (isLearned) {
                     div.classList.add('learned');
                 }
 
@@ -3728,11 +3730,11 @@
                     showHintAfterMisses: window.innerWidth < 600 ? 2 : 3,
                     highlightOnComplete: true,
                     highlightColor: '#c9a227',
-                    charDataLoader: function(char, onComplete) {
-                        // For kana, we need to use the correct CDN path
+                    charDataLoader: function(char, onComplete, onError) {
+                        // Use kana-svg-data package for kana stroke data
                         const isHiragana = HIRAGANA_CHARS.includes(char);
                         const folder = isHiragana ? 'hiragana' : 'katakana';
-                        const url = `https://cdn.jsdelivr.net/npm/hanzi-writer-data-jp@2.0/${folder}/${encodeURIComponent(char)}.json`;
+                        const url = `https://cdn.jsdelivr.net/npm/kana-svg-data/dist/${folder}/${encodeURIComponent(char)}.json`;
 
                         fetch(url)
                             .then(res => {
@@ -3740,13 +3742,19 @@
                                 return res.json();
                             })
                             .then(data => {
+                                // Transform kana-svg-data format to HanziWriter format
+                                const transformedData = {
+                                    strokes: data.strokes.map(s => s.value),
+                                    medians: data.medians.map(m => m.value)
+                                };
                                 strokeDataLoaded = true;
-                                onComplete(data);
+                                onComplete(transformedData);
                             })
                             .catch(err => {
-                                console.log('No stroke data for kana:', char);
+                                console.log('No stroke data for kana:', char, err);
                                 fallbackBtn.style.display = 'inline-block';
                                 fallbackBtn.textContent = 'Mark as Learned (no stroke data)';
+                                if (onError) onError(err);
                             });
                     }
                 });
