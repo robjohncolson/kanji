@@ -495,6 +495,104 @@
             margin-top: 0.3rem;
         }
 
+        /* Kana Stroke Practice Modal */
+        .kana-stroke-container {
+            width: 280px;
+            height: 280px;
+            margin: 0 auto 1.5rem;
+            border: 1px solid var(--stone);
+            background: white;
+            position: relative;
+            touch-action: none;
+        }
+
+        #kana-svg-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        #kana-svg-layer svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Override animCJK auto-animation - hide all strokes initially */
+        #kana-svg-layer svg path[clip-path] {
+            animation: none !important;
+            stroke-dashoffset: 3339 !important;
+        }
+
+        /* Show completed strokes */
+        #kana-svg-layer svg path.stroke-complete {
+            stroke-dashoffset: 0 !important;
+            stroke: #1a1a1a !important;
+        }
+
+        /* Highlight current stroke as guide */
+        #kana-svg-layer svg path.stroke-current {
+            stroke: var(--gold) !important;
+            stroke-dashoffset: 0 !important;
+            opacity: 0.5;
+        }
+
+        /* Show the base character outline faded */
+        #kana-svg-layer svg path:not([clip-path]) {
+            fill: #e8e4dc;
+            stroke: none;
+        }
+
+        #kana-draw-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            cursor: crosshair;
+            z-index: 2;
+        }
+
+        .stroke-counter {
+            font-size: 0.9rem;
+            color: var(--stone);
+            margin-left: 0.5rem;
+        }
+
+        /* Grid overlay for stroke practice */
+        .kana-stroke-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image:
+                linear-gradient(var(--mist) 1px, transparent 1px),
+                linear-gradient(90deg, var(--mist) 1px, transparent 1px);
+            background-size: 70px 70px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* Cross guidelines */
+        .kana-stroke-container::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background:
+                linear-gradient(var(--mist) 1px, transparent 1px) 0 139px / 100% 2px no-repeat,
+                linear-gradient(90deg, var(--mist) 1px, transparent 1px) 139px 0 / 2px 100% no-repeat;
+            pointer-events: none;
+            z-index: 0;
+        }
+
         /* History */
         .history-section {
             background: var(--washi);
@@ -1134,7 +1232,7 @@
         </div>
     </div>
 
-    <!-- Kana Quiz Modal -->
+    <!-- Kana Quiz Modal (fallback) -->
     <div class="modal-overlay" id="kana-quiz-modal">
         <div class="modal-content kana-quiz-content">
             <button class="close-modal" onclick="closeKanaQuizModal()">&times;</button>
@@ -1142,6 +1240,31 @@
             <div class="kana-quiz-prompt" id="kana-quiz-prompt">What is the romaji?</div>
             <div class="kana-quiz-choices" id="kana-quiz-choices"></div>
             <div class="kana-quiz-feedback" id="kana-quiz-feedback"></div>
+        </div>
+    </div>
+
+    <!-- Kana Stroke Practice Modal -->
+    <div class="modal-overlay" id="kana-stroke-modal">
+        <div class="modal-content">
+            <button class="close-modal" onclick="closeKanaStrokeModal()">&times;</button>
+            <div class="modal-header">
+                Practice: <span class="target-char" id="kana-stroke-target"></span>
+                <span class="stroke-counter" id="kana-stroke-counter"></span>
+            </div>
+            <div class="kana-stroke-container" id="kana-stroke-container">
+                <div id="kana-svg-layer"></div>
+                <canvas id="kana-draw-canvas"></canvas>
+            </div>
+            <div class="modal-actions" id="kana-stroke-actions">
+                <button class="btn btn-secondary" onclick="showKanaStrokeHint()">Show Stroke</button>
+                <button class="btn btn-secondary" onclick="retryKanaStroke()">Retry</button>
+                <button class="btn btn-secondary" onclick="skipKanaChar()">Skip</button>
+            </div>
+            <div class="modal-actions" id="kana-stroke-fallback" style="display: none;">
+                <button class="btn btn-primary" onclick="fallbackToKanaQuiz()">Practice Romaji Quiz Instead</button>
+                <button class="btn btn-secondary" onclick="closeKanaStrokeModal()">Cancel</button>
+            </div>
+            <div class="modal-status" id="kana-stroke-status"></div>
         </div>
     </div>
 
@@ -1371,6 +1494,15 @@
         let currentKanaType = null; // 'hiragana' or 'katakana' for practice modal
         let currentPracticeChar = null;
         let strokeDataLoaded = false;
+
+        // Kana stroke practice state
+        let kanaStrokePaths = [];          // Array of stroke path data from SVG
+        let currentKanaStrokeIndex = 0;    // Which stroke we're on
+        let kanaDrawingPoints = [];        // User's current stroke points
+        let kanaCanvas = null;
+        let kanaCtx = null;
+        let isDrawingKana = false;
+        let currentKanaChar = null;        // Current kana being practiced
 
         // Streak tracking
         let streakData = JSON.parse(localStorage.getItem('streakData') || '{"streak": 0, "lastPractice": null}');
@@ -3823,7 +3955,7 @@
         }
 
         function handleKanaClick(char, type) {
-            openKanaPracticeModal(char, type);
+            openKanaStrokeModal(char, type);
         }
 
         function openKanaPracticeModal(char, type) {
@@ -3950,6 +4082,456 @@
             modal.classList.remove('active');
             document.body.classList.remove('modal-open');
         }
+
+        // ========== KANA STROKE PRACTICE ==========
+
+        async function openKanaStrokeModal(char, type) {
+            currentKanaChar = char;
+            currentKanaType = type;
+            currentKanaStrokeIndex = 0;
+            kanaStrokePaths = [];
+            kanaDrawingPoints = [];
+
+            const modal = document.getElementById('kana-stroke-modal');
+            const target = document.getElementById('kana-stroke-target');
+            const counter = document.getElementById('kana-stroke-counter');
+            const svgLayer = document.getElementById('kana-svg-layer');
+            const status = document.getElementById('kana-stroke-status');
+            const actions = document.getElementById('kana-stroke-actions');
+            const fallback = document.getElementById('kana-stroke-fallback');
+
+            target.textContent = char;
+            counter.textContent = '';
+            status.textContent = 'Loading...';
+            status.className = 'modal-status';
+            svgLayer.innerHTML = '';
+            actions.style.display = 'flex';
+            fallback.style.display = 'none';
+
+            document.body.classList.add('modal-open');
+            modal.classList.add('active');
+
+            // Fetch SVG from animCJK
+            const unicode = char.charCodeAt(0);
+            const svgUrl = `https://raw.githubusercontent.com/parsimonhi/animCJK/master/svgsJaKana/${unicode}.svg`;
+
+            try {
+                const response = await fetch(svgUrl);
+                if (!response.ok) throw new Error('SVG not found');
+                const svgText = await response.text();
+
+                // Parse and inject SVG
+                svgLayer.innerHTML = svgText;
+
+                // Parse stroke paths from SVG
+                kanaStrokePaths = parseAnimCJKStrokes(svgLayer);
+
+                if (kanaStrokePaths.length === 0) {
+                    throw new Error('No stroke data found');
+                }
+
+                // Initialize canvas
+                initKanaCanvas();
+
+                // Highlight first stroke
+                updateKanaStrokeDisplay();
+                status.textContent = '';
+
+            } catch (error) {
+                console.error('Failed to load kana stroke data:', error);
+                status.textContent = 'Stroke data unavailable';
+                status.className = 'modal-status error';
+                actions.style.display = 'none';
+                fallback.style.display = 'flex';
+            }
+        }
+
+        function parseAnimCJKStrokes(svgLayer) {
+            const strokes = [];
+            const svg = svgLayer.querySelector('svg');
+            if (!svg) return strokes;
+
+            // Get all paths with clip-path (these are the animated stroke paths)
+            const animatedPaths = svg.querySelectorAll('path[clip-path]');
+
+            // Sort by delay (--d CSS variable) to get stroke order
+            const pathsWithDelay = [];
+            animatedPaths.forEach((path, index) => {
+                const style = path.getAttribute('style') || '';
+                const delayMatch = style.match(/--d:\s*(\d+)s/);
+                const delay = delayMatch ? parseInt(delayMatch[1]) : index;
+                pathsWithDelay.push({ path, delay, d: path.getAttribute('d') });
+            });
+
+            // Sort by delay
+            pathsWithDelay.sort((a, b) => a.delay - b.delay);
+
+            // Extract path data
+            pathsWithDelay.forEach(item => {
+                const points = parsePathToPoints(item.d);
+                if (points.length > 0) {
+                    strokes.push({
+                        element: item.path,
+                        points: points,
+                        d: item.d
+                    });
+                }
+            });
+
+            return strokes;
+        }
+
+        function parsePathToPoints(d) {
+            const points = [];
+            if (!d) return points;
+
+            // Parse SVG path d attribute
+            // Format: M x,y L x,y L x,y ... or M x,y x,y x,y ...
+            const parts = d.trim().split(/\s+/);
+            let currentX = 0, currentY = 0;
+
+            for (let i = 0; i < parts.length; i++) {
+                const part = parts[i];
+
+                if (part === 'M' || part === 'L') {
+                    // Next part should be coordinates
+                    continue;
+                }
+
+                // Try to parse as coordinates
+                if (part.includes(',')) {
+                    const [x, y] = part.split(',').map(Number);
+                    if (!isNaN(x) && !isNaN(y)) {
+                        currentX = x;
+                        currentY = y;
+                        points.push({ x: currentX, y: currentY });
+                    }
+                } else {
+                    // Could be just x coordinate, next is y
+                    const x = parseFloat(part);
+                    if (!isNaN(x) && i + 1 < parts.length) {
+                        const y = parseFloat(parts[i + 1]);
+                        if (!isNaN(y)) {
+                            currentX = x;
+                            currentY = y;
+                            points.push({ x: currentX, y: currentY });
+                            i++; // Skip the y we just consumed
+                        }
+                    }
+                }
+            }
+
+            return points;
+        }
+
+        function initKanaCanvas() {
+            kanaCanvas = document.getElementById('kana-draw-canvas');
+            const container = document.getElementById('kana-stroke-container');
+
+            // Set canvas size to match container
+            const rect = container.getBoundingClientRect();
+            kanaCanvas.width = rect.width;
+            kanaCanvas.height = rect.height;
+
+            kanaCtx = kanaCanvas.getContext('2d');
+            kanaCtx.strokeStyle = '#1a1a1a';
+            kanaCtx.lineWidth = 8;
+            kanaCtx.lineCap = 'round';
+            kanaCtx.lineJoin = 'round';
+
+            // Remove old listeners if any
+            kanaCanvas.onmousedown = null;
+            kanaCanvas.onmousemove = null;
+            kanaCanvas.onmouseup = null;
+            kanaCanvas.onmouseleave = null;
+            kanaCanvas.ontouchstart = null;
+            kanaCanvas.ontouchmove = null;
+            kanaCanvas.ontouchend = null;
+
+            // Mouse events
+            kanaCanvas.onmousedown = handleKanaStrokeStart;
+            kanaCanvas.onmousemove = handleKanaStrokeMove;
+            kanaCanvas.onmouseup = handleKanaStrokeEnd;
+            kanaCanvas.onmouseleave = handleKanaStrokeEnd;
+
+            // Touch events
+            kanaCanvas.ontouchstart = (e) => {
+                e.preventDefault();
+                handleKanaStrokeStart(e.touches[0]);
+            };
+            kanaCanvas.ontouchmove = (e) => {
+                e.preventDefault();
+                handleKanaStrokeMove(e.touches[0]);
+            };
+            kanaCanvas.ontouchend = (e) => {
+                e.preventDefault();
+                handleKanaStrokeEnd();
+            };
+        }
+
+        function getCanvasPoint(e) {
+            const rect = kanaCanvas.getBoundingClientRect();
+            return {
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top
+            };
+        }
+
+        function handleKanaStrokeStart(e) {
+            isDrawingKana = true;
+            kanaDrawingPoints = [];
+            const point = getCanvasPoint(e);
+            kanaDrawingPoints.push(point);
+
+            kanaCtx.beginPath();
+            kanaCtx.moveTo(point.x, point.y);
+        }
+
+        function handleKanaStrokeMove(e) {
+            if (!isDrawingKana) return;
+
+            const point = getCanvasPoint(e);
+            kanaDrawingPoints.push(point);
+
+            kanaCtx.lineTo(point.x, point.y);
+            kanaCtx.stroke();
+            kanaCtx.beginPath();
+            kanaCtx.moveTo(point.x, point.y);
+        }
+
+        function handleKanaStrokeEnd() {
+            if (!isDrawingKana) return;
+            isDrawingKana = false;
+
+            // Validate the stroke
+            if (kanaDrawingPoints.length >= 3) {
+                const isValid = validateKanaStroke();
+                if (isValid) {
+                    advanceKanaStroke();
+                } else {
+                    showKanaStrokeError();
+                }
+            }
+        }
+
+        function validateKanaStroke() {
+            if (currentKanaStrokeIndex >= kanaStrokePaths.length) return false;
+
+            const expected = kanaStrokePaths[currentKanaStrokeIndex].points;
+            if (expected.length === 0) return true; // Skip if no points
+
+            // Scale factor: SVG is 1024x1024, canvas may differ
+            const scaleX = kanaCanvas.width / 1024;
+            const scaleY = kanaCanvas.height / 1024;
+
+            // Get scaled expected points
+            const scaledExpected = expected.map(p => ({
+                x: p.x * scaleX,
+                y: p.y * scaleY
+            }));
+
+            const userStart = kanaDrawingPoints[0];
+            const userEnd = kanaDrawingPoints[kanaDrawingPoints.length - 1];
+            const expectedStart = scaledExpected[0];
+            const expectedEnd = scaledExpected[scaledExpected.length - 1];
+
+            const isMobile = window.innerWidth <= 600;
+            const tolerance = isMobile ? 80 : 60; // pixels
+
+            // Check 1: Start point roughly matches
+            const startDist = distance(userStart, expectedStart);
+            if (startDist > tolerance * 2) return false;
+
+            // Check 2: End point roughly matches
+            const endDist = distance(userEnd, expectedEnd);
+            if (endDist > tolerance * 2) return false;
+
+            // Check 3: Direction roughly matches (lenient)
+            const userDir = getDirection(userStart, userEnd);
+            const expectedDir = getDirection(expectedStart, expectedEnd);
+            const angleDiff = Math.abs(normalizeAngle(userDir - expectedDir));
+            if (angleDiff > 60 && angleDiff < 300) return false; // Allow 60° tolerance
+
+            return true;
+        }
+
+        function distance(p1, p2) {
+            const dx = p1.x - p2.x;
+            const dy = p1.y - p2.y;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        function getDirection(start, end) {
+            return Math.atan2(end.y - start.y, end.x - start.x) * 180 / Math.PI;
+        }
+
+        function normalizeAngle(angle) {
+            while (angle < 0) angle += 360;
+            while (angle >= 360) angle -= 360;
+            return angle;
+        }
+
+        function advanceKanaStroke() {
+            // Mark current stroke as complete
+            if (currentKanaStrokeIndex < kanaStrokePaths.length) {
+                kanaStrokePaths[currentKanaStrokeIndex].element.classList.add('stroke-complete');
+                kanaStrokePaths[currentKanaStrokeIndex].element.classList.remove('stroke-current');
+            }
+
+            currentKanaStrokeIndex++;
+
+            // Clear canvas for next stroke
+            kanaCtx.clearRect(0, 0, kanaCanvas.width, kanaCanvas.height);
+
+            if (currentKanaStrokeIndex >= kanaStrokePaths.length) {
+                // All strokes complete!
+                completeKanaPractice();
+            } else {
+                // Show next stroke target
+                updateKanaStrokeDisplay();
+            }
+        }
+
+        function updateKanaStrokeDisplay() {
+            const counter = document.getElementById('kana-stroke-counter');
+            counter.textContent = `(${currentKanaStrokeIndex + 1}/${kanaStrokePaths.length})`;
+
+            // Remove current class from all
+            kanaStrokePaths.forEach(s => s.element.classList.remove('stroke-current'));
+
+            // Add current class to current stroke
+            if (currentKanaStrokeIndex < kanaStrokePaths.length) {
+                kanaStrokePaths[currentKanaStrokeIndex].element.classList.add('stroke-current');
+            }
+        }
+
+        function showKanaStrokeError() {
+            const status = document.getElementById('kana-stroke-status');
+            status.textContent = 'Try again - follow the highlighted stroke';
+            status.className = 'modal-status error';
+
+            // Clear canvas
+            kanaCtx.clearRect(0, 0, kanaCanvas.width, kanaCanvas.height);
+
+            // Clear error after a moment
+            setTimeout(() => {
+                status.textContent = '';
+                status.className = 'modal-status';
+            }, 1500);
+        }
+
+        function showKanaStrokeHint() {
+            if (currentKanaStrokeIndex >= kanaStrokePaths.length) return;
+
+            const stroke = kanaStrokePaths[currentKanaStrokeIndex];
+            const points = stroke.points;
+            if (points.length < 2) return;
+
+            // Scale and animate the stroke
+            const scaleX = kanaCanvas.width / 1024;
+            const scaleY = kanaCanvas.height / 1024;
+
+            kanaCtx.strokeStyle = '#c9a227'; // gold color
+            kanaCtx.lineWidth = 6;
+
+            let i = 0;
+            function animateStroke() {
+                if (i >= points.length - 1) {
+                    // Reset style
+                    kanaCtx.strokeStyle = '#1a1a1a';
+                    kanaCtx.lineWidth = 8;
+                    // Clear after showing
+                    setTimeout(() => {
+                        kanaCtx.clearRect(0, 0, kanaCanvas.width, kanaCanvas.height);
+                    }, 500);
+                    return;
+                }
+
+                const p1 = { x: points[i].x * scaleX, y: points[i].y * scaleY };
+                const p2 = { x: points[i + 1].x * scaleX, y: points[i + 1].y * scaleY };
+
+                kanaCtx.beginPath();
+                kanaCtx.moveTo(p1.x, p1.y);
+                kanaCtx.lineTo(p2.x, p2.y);
+                kanaCtx.stroke();
+
+                i++;
+                setTimeout(animateStroke, 50);
+            }
+
+            animateStroke();
+        }
+
+        function retryKanaStroke() {
+            // Clear canvas
+            if (kanaCtx) {
+                kanaCtx.clearRect(0, 0, kanaCanvas.width, kanaCanvas.height);
+            }
+            kanaDrawingPoints = [];
+
+            const status = document.getElementById('kana-stroke-status');
+            status.textContent = '';
+            status.className = 'modal-status';
+        }
+
+        function skipKanaChar() {
+            closeKanaStrokeModal();
+        }
+
+        function completeKanaPractice() {
+            const status = document.getElementById('kana-stroke-status');
+            const learnedSet = currentKanaType === 'hiragana' ? learnedHiragana : learnedKatakana;
+
+            // Increment progress
+            kanaProgress[currentKanaChar] = (kanaProgress[currentKanaChar] || 0) + 1;
+            const newProgress = kanaProgress[currentKanaChar];
+            const isMastered = newProgress >= KANA_MASTERY_REQUIRED;
+
+            if (isMastered && !learnedSet.has(currentKanaChar)) {
+                status.textContent = `Mastered! ${KANA_MASTERY_REQUIRED}/${KANA_MASTERY_REQUIRED}`;
+                status.className = 'modal-status success';
+                markKanaAsLearned(currentKanaChar, currentKanaType, 'stroke');
+            } else if (isMastered) {
+                status.textContent = 'Perfect!';
+                status.className = 'modal-status success';
+                save();
+            } else {
+                status.textContent = `Correct! ${newProgress}/${KANA_MASTERY_REQUIRED}`;
+                status.className = 'modal-status success';
+                save();
+                renderKanaSections();
+            }
+
+            // Close after delay
+            setTimeout(() => {
+                closeKanaStrokeModal();
+            }, 1200);
+        }
+
+        function closeKanaStrokeModal() {
+            const modal = document.getElementById('kana-stroke-modal');
+            modal.classList.remove('active');
+            document.body.classList.remove('modal-open');
+
+            // Clean up
+            kanaStrokePaths = [];
+            currentKanaStrokeIndex = 0;
+            kanaDrawingPoints = [];
+            currentKanaChar = null;
+            isDrawingKana = false;
+        }
+
+        function fallbackToKanaQuiz() {
+            // Save before closing (closeKanaStrokeModal clears these)
+            const char = currentKanaChar;
+            const type = currentKanaType;
+            closeKanaStrokeModal();
+            if (char && type) {
+                openKanaPracticeModal(char, type);
+            }
+        }
+
+        // ========== END KANA STROKE PRACTICE ==========
 
         function markKanaAsLearned(char, type, method) {
             const learnedSet = type === 'hiragana' ? learnedHiragana : learnedKatakana;
@@ -4547,6 +5129,14 @@
 
         document.getElementById('review-modal').addEventListener('click', (e) => {
             if (e.target.id === 'review-modal') closeReviewModal();
+        });
+
+        document.getElementById('kana-stroke-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'kana-stroke-modal') closeKanaStrokeModal();
+        });
+
+        document.getElementById('kana-quiz-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'kana-quiz-modal') closeKanaQuizModal();
         });
 
         init();
